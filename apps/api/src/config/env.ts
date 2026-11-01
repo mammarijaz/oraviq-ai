@@ -83,8 +83,11 @@ export function env(): Env {
     isProduction,
     isTest,
   };
-  if (isProduction && (parsed.JWT_SECRET.startsWith('dev-') || parsed.JWT_REFRESH_SECRET.startsWith('dev-'))) {
-    throw new Error('Set JWT_SECRET and JWT_REFRESH_SECRET in production.');
+  // Refuse the built-in defaults, the .env.example placeholders, short secrets and a shared secret.
+  const weak = (s: string) => s.startsWith('dev-') || s.startsWith('change-me') || s.length < 32;
+  if (isProduction && (weak(parsed.JWT_SECRET) || weak(parsed.JWT_REFRESH_SECRET) || parsed.JWT_SECRET === parsed.JWT_REFRESH_SECRET)) {
+    cached = null;
+    throw new Error('Set JWT_SECRET and JWT_REFRESH_SECRET in production (32+ random characters each, different from each other).');
   }
   return cached;
 }

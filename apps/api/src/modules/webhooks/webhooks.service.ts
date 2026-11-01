@@ -53,6 +53,8 @@ export class WebhooksService implements OnModuleInit {
   }
 
   verifyRetell(raw: Buffer, signature: string | undefined): void {
+    // The mock adapter accepts unsigned traffic and a public dev key: never in production.
+    if (this.voiceAdapter.provider === 'mock' && env().isProduction) throw new UnauthorizedException('Webhook secret not configured.');
     if (!this.voiceAdapter.verifySignature(raw.toString('utf8'), signature)) throw new UnauthorizedException('Bad signature.');
   }
 
@@ -89,6 +91,8 @@ export class WebhooksService implements OnModuleInit {
   }
 
   async receiveStripe(raw: Buffer, signature: string | undefined) {
+    // Mock payments don't verify signatures: never accept them in production.
+    if (this.payments.provider === 'mock' && env().isProduction) throw new UnauthorizedException('Webhook secret not configured.');
     const ev = this.payments.parseWebhook(raw, signature);
     return this.store(this.payments.provider === 'stripe' ? 'stripe' : 'mock_stripe', ev.id, ev.rawType, { ...((ev.payload as object) ?? {}), _parsed: { ...ev, payload: undefined } });
   }
@@ -156,10 +160,15 @@ export class WebhooksService implements OnModuleInit {
     if (provider === 'stripe' || provider === 'mock_stripe') {
       const p = body._parsed ?? {};
       if (p.type !== 'deposit.paid') return { handled: false };
-      let tenantId: string | null = p.tenantId ?? null;
-      if (!tenantId && p.account) {
+      // The connected account the event came from decides the tenant. Metadata is written by whoever
+      // controls that Stripe account (a Standard account belongs to the hauler), so it must agree.
+      let tenantId: string | null = null;
+      if (p.account) {
         const acc = await this.prisma.channelAccount.findFirst({ where: { kind: 'stripe', externalAccountId: String(p.account) } });
         tenantId = acc?.tenantId ?? null;
+        if (tenantId && p.tenantId && p.tenantId !== tenantId) tenantId = null;
+      } else if (provider === 'mock_stripe') {
+        tenantId = p.tenantId ?? null; // dev "mark paid" path (refused in production)
       }
       if (!tenantId) return { handled: false };
       await this.ctx.run(tenantId, () => this.orders.markDepositPaid({ orderId: p.orderId, sessionId: p.sessionId, amountCents: p.amountCents, eventId: p.id }));

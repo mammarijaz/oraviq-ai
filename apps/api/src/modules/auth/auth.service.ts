@@ -68,6 +68,12 @@ export class AuthService {
     }
     const m = await this.prisma.membership.findUnique({ where: { tenantId_userId: { tenantId: row.tenantId, userId: row.userId } } });
     if (!m) throw new UnauthorizedException('You no longer have access to this business.');
+    // Claim the token atomically: a concurrent second use is a reuse, not a second rotation.
+    const claimed = await this.prisma.refreshToken.updateMany({ where: { id: row.id, revokedAt: null }, data: { revokedAt: new Date() } });
+    if (!claimed.count) {
+      await this.prisma.refreshToken.updateMany({ where: { userId: row.userId, revokedAt: null }, data: { revokedAt: new Date() } });
+      throw new UnauthorizedException('Your session has expired. Sign in again.');
+    }
     return this.issue(row.userId, row.tenantId, m.role, row.id);
   }
 

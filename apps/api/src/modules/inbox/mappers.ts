@@ -138,6 +138,15 @@ export function toReviewDto(r: Review & { drafts: ReviewReplyDraft[] }): ReviewD
   };
 }
 
+/**
+ * A customer's first name, safe to put in a text we send: one plain word or null.
+ * Names come from public forms and chats, so a "name" like "https://…" must not be relayed.
+ */
+export function safeFirstName(name: string | null | undefined): string | null {
+  const first = String(name ?? '').replace(/\(.*?\)/g, ' ').trim().split(/\s+/)[0] ?? '';
+  return /^\p{L}[\p{L}'’.-]{0,29}$/u.test(first) ? first : null;
+}
+
 /** Short preview line for the conversation list. */
 export function preview(body: string): string {
   const s = body.replace(/\s+/g, ' ').trim();

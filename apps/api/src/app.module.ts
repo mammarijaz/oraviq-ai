@@ -30,7 +30,9 @@ export const loggerModule = () =>
       level: env().LOG_LEVEL ?? (env().isTest ? 'silent' : 'info'),
       transport: env().isProduction || env().isTest ? undefined : { target: 'pino-pretty', options: { singleLine: true, ignore: 'pid,hostname,req,res' } },
       autoLogging: { ignore: (req) => (req.url ?? '').startsWith('/api/v1/health') },
-      redact: ['req.headers.authorization', 'req.headers.cookie'],
+      redact: ['req.headers.authorization', 'req.headers.cookie', 'req.headers["x-zernio-signature"]', 'req.headers["x-retell-signature"]', 'req.headers["stripe-signature"]'],
+      // Query strings carry customer phone numbers (?q=) and OAuth codes (Stripe callback): log the path only.
+      serializers: { req: (r: { url?: string; query?: unknown }) => ({ ...r, url: String(r.url ?? '').split('?')[0], query: undefined }) },
     },
   });
 

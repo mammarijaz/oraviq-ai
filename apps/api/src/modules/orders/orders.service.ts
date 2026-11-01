@@ -191,11 +191,13 @@ export class OrdersService implements OnModuleInit {
     if (!canTransition(order.status, 'confirmed')) throw new ConflictActionException(`An order that is ${ORDER_STATUS_LABELS[order.status].toLowerCase()} can't be confirmed.`);
     const link = order.depositPaid ? null : await this.depositLink(order, tenant);
     await this.dbs.tx(async (tx) => {
-      const conv = await this.customerConversation(tx, order);
-      await tx.order.update({
-        where: { id },
+      // Compare-and-set on the status we checked, so concurrent confirms can't both text the customer.
+      const claimed = await tx.order.updateMany({
+        where: { id, status: order.status },
         data: { status: 'confirmed', ...(link ? { depositRequested: true, depositUrl: link.url, paymentSessionId: link.sessionId, paymentProvider: this.payments.provider, depositCents: Math.min(tenant.depositCents, order.quote?.totalCents ?? tenant.depositCents) } : {}) },
       });
+      if (!claimed.count) throw new ConflictActionException('This order was just changed by someone else. Refresh and try again.');
+      const conv = await this.customerConversation(tx, order);
       await this.event(tx, order, 'status', order.status, 'confirmed', { depositLink: !!link });
       const what = order.quote ? `${order.quote.yards}-yard` : 'your dumpster';
       const when = order.deliveryDateLabel || (order.deliveryDate ?? 'the day you asked for');
@@ -267,10 +269,11 @@ export class OrdersService implements OnModuleInit {
     }
     await this.dbs.tx(async (tx) => {
       const now = new Date();
-      await tx.order.update({
-        where: { id },
+      const claimed = await tx.order.updateMany({
+        where: { id, status: order.status },
         data: { status: to, ...(to === 'delivered' ? { deliveredAt: now } : {}), ...(to === 'picked_up' ? { pickedUpAt: now } : {}), ...(to === 'deposit_paid' ? { depositPaid: true, paidAt: order.paidAt ?? now } : {}) },
       });
+      if (!claimed.count) throw new ConflictActionException('This order was just changed by someone else. Refresh and try again.');
       await this.event(tx, order, 'status', order.status, to);
       if (to === 'picked_up') await this.reviewRequests.onPickedUp(tx, { ...order, pickedUpAt: now });
       if (to === 'cancelled') await this.reviewRequests.onCancelled(tx, order);
@@ -294,7 +297,9 @@ export class OrdersService implements OnModuleInit {
     if (order.depositPaid) return this.queries.orderDto(order.id);
     await this.dbs.tx(async (tx) => {
       const to: OrderStatus | null = canTransition(order.status, 'deposit_paid') ? 'deposit_paid' : null;
-      await tx.order.update({ where: { id: order.id }, data: { depositPaid: true, paidAt: new Date(), ...(to ? { status: to } : {}), ...(input.amountCents ? { depositCents: input.amountCents } : {}) } });
+      // Stripe sends several "paid" events per payment (and retries): record the payment once.
+      const claimed = await tx.order.updateMany({ where: { id: order.id, depositPaid: false }, data: { depositPaid: true, paidAt: new Date(), ...(to ? { status: to } : {}), ...(input.amountCents ? { depositCents: input.amountCents } : {}) } });
+      if (!claimed.count) return;
       await this.event(tx, order, 'deposit_paid', order.status, to, { eventId: input.eventId, amountCents: input.amountCents ?? null });
       const conv = order.conversation ?? (await this.customerConversation(tx, order));
       await this.messaging.addSystem(tx, conv, `Deposit paid${input.amountCents ? ` (${formatMoney(input.amountCents)})` : ''} for order ${order.number}.`);

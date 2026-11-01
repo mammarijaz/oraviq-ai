@@ -7,6 +7,7 @@ import { LLM_PROVIDER, type AiState, type AssistantTools, type CustomerContext, 
 import { OutboxService } from '../../jobs/outbox.service';
 import { DbService } from '../../prisma/db.service';
 import type { TenantTx } from '../../prisma/tenant-prisma';
+import { safeFirstName } from '../inbox/mappers';
 import { MessagingService } from '../messaging/messaging.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { OrdersService } from '../orders/orders.service';
@@ -20,6 +21,19 @@ export interface TurnEvents {
 }
 
 export const AUTOMATED_RE = /automated assistant/i;
+
+/**
+ * unbackedAmounts() only sees "$123". Rewrite the other ways a model can state money
+ * ("500 dollars", "USD 500", fullwidth "＄500") into that form before checking, and
+ * report spelled-out amounts ("five hundred dollars"), which can't be checked at all.
+ */
+export function moneyGuardText(reply: string): { text: string; spelledOut: boolean } {
+  const text = reply
+    .replace(/[＄﹩]/g, '$')
+    .replace(/\b(?:USD|US\$)\s?(\d[\d,]*(?:\.\d{1,2})?)/gi, '$$$1')
+    .replace(/(\d[\d,]*(?:\.\d{1,2})?)\s?(?:dollars?|bucks|usd)\b/gi, '$$$1');
+  return { text, spelledOut: /\b(?:dollars?|bucks)\b/i.test(text) };
+}
 
 /** "Concrete or dirt in a 20-yard" → "concrete or dirt in a 20-yard" (keeps "ZIP …"). */
 export function lowerFirst(s: string): string {
@@ -56,7 +70,7 @@ export class AssistantService {
     const completed = await db.order.count({ where: { contactId, status: { in: ['picked_up', 'closed'] } } });
     const last = await db.order.findFirst({ where: { contactId, status: { not: 'cancelled' } }, orderBy: { createdAt: 'desc' }, include: { quote: true } });
     const name = contact?.name ?? null;
-    const first = name ? name.replace(/\(.*\)/, '').trim().split(/\s+/)[0] : null;
+    const first = safeFirstName(name);
     return {
       name,
       firstName: first || null,
@@ -153,7 +167,9 @@ export class AssistantService {
     // Guardrail 2: every $ amount must be backed by a quote from @oraviq/pricing.
     const earlier = await db.quote.findMany({ where: { conversationId }, orderBy: { createdAt: 'desc' }, take: 10 });
     const backing = [...ev.quotes.map((q) => q.quote), ...earlier.map((q) => q.quote as unknown as Quote)];
-    const bad = unbackedAmounts(reply, backing);
+    const guard = moneyGuardText(reply);
+    const bad = unbackedAmounts(guard.text, backing);
+    if (guard.spelledOut) bad.push('an amount in words');
     let blocked: string | null = null;
     if (bad.length) {
       blocked = reply;

@@ -1,6 +1,7 @@
 import { Body, Controller, Get, HttpCode, Param, ParseUUIDPipe, Post, Put, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import type { ReviewRequestSettingsDto } from '@oraviq/shared';
+import { Roles } from '../../common/decorators';
 import { csv } from '../inbox/inbox.controller';
 import { ReviewRequestsService } from './review-requests.service';
 import { ReviewsService } from './reviews.service';
@@ -40,6 +41,7 @@ export class ReviewsController {
   }
 
   @Put('review-requests')
+  @Roles('owner', 'admin')
   updateRequests(@Body() body: Partial<ReviewRequestSettingsDto>) {
     return this.requests.updateSettings(body ?? {});
   }

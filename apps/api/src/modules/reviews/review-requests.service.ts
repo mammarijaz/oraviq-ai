@@ -9,6 +9,7 @@ import { DbService } from '../../prisma/db.service';
 import type { TenantTx } from '../../prisma/tenant-prisma';
 import { AuditService } from '../audit/audit.service';
 import { ContactsService } from '../contacts/contacts.service';
+import { safeFirstName } from '../inbox/mappers';
 import { MessagingService } from '../messaging/messaging.service';
 
 export const DEFAULT_REVIEW_TEMPLATE = (business: string, link: string | null) =>
@@ -115,7 +116,7 @@ export class ReviewRequestsService implements OnModuleInit {
       if (opts.automatic) return this.jobDto(orderId);
       throw new ConflictActionException('This customer replied STOP, so review requests are skipped.', { reason: 'opted_out' });
     }
-    const first = (order.contact.name ?? '').trim().split(/\s+/)[0] || 'there';
+    const first = safeFirstName(order.contact.name) ?? 'there';
     const body = this.render(s.template, first, s.reviewLink);
     await this.dbs.tx(async (tx) => {
       let conv: Conversation | null = order.conversation;

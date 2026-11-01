@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { activeSizes, calculateQuote, formatMoney, normalizeZip, type QuoteError } from '@oraviq/pricing';
-import { TEXT_CONSENT_VERSION, type PublicBookingRequest, type PublicBookingResponse, type PublicBusinessDto, type PublicChatStartResponse, type Quote, type QuoteRequest } from '@oraviq/shared';
+import { TEXT_CONSENT_VERSION, textConsentDisclosure, type PublicBookingRequest, type PublicBookingResponse, type PublicBusinessDto, type PublicChatStartResponse, type Quote, type QuoteRequest } from '@oraviq/shared';
 import type { Tenant } from '@prisma/client';
 import { randomBytes } from 'node:crypto';
 import { z } from 'zod';
@@ -13,6 +13,7 @@ import { OutboxService } from '../../jobs/outbox.service';
 import { DbService } from '../../prisma/db.service';
 import { ContactsService } from '../contacts/contacts.service';
 import { InboundService } from '../inbox/inbound.service';
+import { safeFirstName } from '../inbox/mappers';
 import { MessagingService } from '../messaging/messaging.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { OrdersService } from '../orders/orders.service';
@@ -141,9 +142,15 @@ export class PublicService {
       const parsed = bookingSchema.safeParse(raw);
       if (!parsed.success) throw new ProblemsException(parsed.error.issues[0]?.message ?? 'Check the form.', parsed.error.issues.map((i) => i.message));
       const req = parsed.data;
+      // US numbers only: the form texts whatever number it is given (no SMS pumping to premium international ranges).
       const phone = normalizePhone(req.phone);
-      if (!phone) throw new ProblemsException('Enter a 10-digit mobile number.', ['Enter a 10-digit mobile number.']);
+      if (!phone || !/^\+1[2-9]\d{9}$/.test(phone)) throw new ProblemsException('Enter a 10-digit mobile number.', ['Enter a 10-digit mobile number.']);
       if (!req.consent || !req.consentText) throw new ProblemsException('Tick the box so we can text you about this order.', ['Tick the box so we can text you about this order.']);
+      // The ledger records TEXT_CONSENT_VERSION, so the evidence must be that disclosure, not any string.
+      const squash = (s: string) => s.replace(/\s+/g, ' ').trim();
+      if (squash(req.consentText) !== squash(textConsentDisclosure(t.name))) {
+        throw new ProblemsException('The consent wording has changed. Reload the page and try again.', ['The consent wording has changed. Reload the page and try again.']);
+      }
       const table = await this.pricing.current();
       const zip = normalizeZip(req.zip)!;
       const pre = calculateQuote(table, { yards: req.yards, days: req.days, zip, debris: req.debris });
@@ -153,7 +160,7 @@ export class PublicService {
       const iso = resolveDayPhrase(req.deliveryDate, new Date(), t.timezone);
       if (!iso) throw new ProblemsException('Pick a delivery date.', ['Pick a delivery date.']);
       const dateLabel = shortDateLabel(iso);
-      const first = req.name.split(/\s+/)[0];
+      const first = safeFirstName(req.name);
       const now = new Date();
       const tLabel = clockLabel(now, t.timezone);
 
@@ -198,8 +205,8 @@ export class PublicService {
         await tx.orderEvent.create({ data: { tenantId: t.id, orderId: order.id, kind: 'created', toStatus: 'requested', data: { source: 'booking_form' } } });
         await this.outbox.realtime(tx, t.id, { event: 'order.updated', id: order.id });
         const reply = q.ok
-          ? `Thanks, ${first}. We got your request for a ${q.quote.yards}-yard on ${dateLabel}: ${formatMoney(q.quote.totalCents)} delivered. We'll text you to confirm the delivery time.`
-          : `Thanks, ${first}. We got your request for ${dateLabel}. We'll text you a price and delivery time shortly.`;
+          ? `Thanks${first ? `, ${first}` : ''}. We got your request for a ${q.quote.yards}-yard on ${dateLabel}: ${formatMoney(q.quote.totalCents)} delivered. We'll text you to confirm the delivery time.`
+          : `Thanks${first ? `, ${first}` : ''}. We got your request for ${dateLabel}. We'll text you a price and delivery time shortly.`;
         await this.messaging.addMessage(tx, conv, { author: 'assistant', body: reply, quoteId: q.ok ? q.quoteId : null, aiGenerated: false });
         const handoff = q.ok ? null : `ZIP ${zip} is outside your zones; price needed`;
         await tx.conversation.update({ where: { id: conv.id }, data: { state: 'needs_you', tag: 'Order to confirm', handoffReason: handoff, aiState: { introduced: true, stage: 'booked' }, facts: { yards: req.yards, days: req.days, zip, debris: req.debris, address: req.address, date: dateLabel, placement: 'driveway', name: req.name } } });
