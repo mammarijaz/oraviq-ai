@@ -56,6 +56,8 @@ export class ReportsService {
     });
     const channelCounts = new Map<Channel, number>();
     for (const c of convs) channelCounts.set(c.channel, (channelCounts.get(c.channel) ?? 0) + 1);
+    // Phone leads = every call the receptionist handled this week, so "answered X of Y" never reads X > Y.
+    if (calls.length) channelCounts.set('phone', Math.max(channelCounts.get('phone') ?? 0, calls.length));
     const byChannel = [...channelCounts.entries()].map(([channel, count]) => ({ channel, count })).sort((a, b) => b.count - a.count);
 
     return {

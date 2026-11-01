@@ -23,10 +23,10 @@ Errors: `{ statusCode, error, message }` (+ `problems: string[]` for price-table
 | POST | /connections/:channel/connect | → [ChannelConnectionDto] (mock: connects immediately; real: returns `{ redirectUrl }`) |
 
 ## Inbox
-| GET | /conversations?state=needs_you&channel=sms,facebook&q=text&cursor= | → `{ items: ConversationSummaryDto[], nextCursor }` |
+| GET | /conversations?state=needs_you&channel=sms,facebook&q=text&cursor=&limit=50 | → `{ items: ConversationSummaryDto[], nextCursor }` |
 | GET | /conversations/:id | → [ConversationDetailDto] (marks read) |
 | PATCH | /conversations/:id | [UpdateConversationRequest] → [ConversationSummaryDto]. `aiMode: 'off'` = take over (adds a system message). |
-| POST | /conversations/:id/messages | [SendMessageRequest] → [MessageDto]. Owner reply; sends on the conversation's channel (phone/booking_form reply by SMS). Refused if the contact opted out. |
+| POST | /conversations/:id/messages | [SendMessageRequest] → [MessageDto]. Owner reply; sends on the conversation's channel (phone/booking_form reply by SMS). Send an `Idempotency-Key` header per reply. Refused with 409 if the contact opted out. |
 | GET | /contacts?q= | → `{ items: ContactDto[] }` |
 
 ## Quotes, orders
@@ -49,7 +49,7 @@ Errors: `{ statusCode, error, message }` (+ `problems: string[]` for price-table
 | GET | /receptionist/stats | → [ReceptionistStatsDto] |
 | GET | /calls?outcome=quote_given,sent_to_you | → `{ items: CallSummaryDto[] }` |
 | GET | /calls/:id | → [CallDto] |
-| POST | /receptionist/test-call | [TestCallTurnRequest] → [TestCallTurnResponse] (in-app simulator: runs the same voice tools and the mock voice brain) |
+| POST | /receptionist/test-call | [TestCallTurnRequest] → [TestCallTurnResponse] (in-app simulator: runs the same voice tools and the mock voice brain; `end: true` hangs up and returns the summary) |
 
 ## Reviews
 | GET | /reviews?replied=true|false&source=google,facebook&rating=1,2 | → `{ items: ReviewDto[], stats: ReviewStatsDto }` |
@@ -69,14 +69,27 @@ Errors: `{ statusCode, error, message }` (+ `problems: string[]` for price-table
 
 ## Reports and simulator
 | GET | /reports/weekly?to=YYYY-MM-DD | → [WeeklyReportDto] |
-| POST | /simulator/inbound | `{ channel: 'sms'|'facebook'|'instagram'|'web_chat', from?: string, name?: string, body: string }` → `{ conversationId, replies: MessageDto[] }`. Runs the real inbound pipeline through the mock provider (the "Try it out" screen). |
+| POST | /simulator/inbound | [SimulatorInboundRequest] `{ channel: 'sms'|'facebook'|'instagram'|'web_chat', from?, name?, body, newConversation? }` → [SimulatorInboundResponse] `{ conversationId, replies: MessageDto[] }`. Runs the real inbound pipeline through the mock provider (the "Try it out" screen). |
 | POST | /simulator/missed-call | `{ from?: string }` → `{ conversationId }` |
+
+## Notifications and health
+| GET | /health | → `{ ok, inlineJobs, adapters: { llm, messaging, telephony, reviews, voice, payments, domains } }` (**public**; each adapter is `mock` or `real`) |
+| GET | /notifications | → [NotificationDto][] (owner alerts, newest first) |
+| GET | /notifications/push-key | → `{ publicKey }` (VAPID) |
+| POST | /notifications/push-subscriptions | a browser PushSubscription JSON → `{ ok: true }` |
+
+## Dev only (refused with 403 in production)
+| POST | /dev/payments/:sessionId/pay | marks a mock deposit paid (drives the same webhook path as Stripe) |
+| POST | /dev/jobs/run | runs due scheduled actions now |
+| GET | /dev/mock/sent | messages the mock providers "sent" |
+
+Refused actions (customer opted out, illegal order transition) return **409** with a message.
 
 ## Public (widgets and hauler sites), keyed by publishable key `pk_…`
 | GET | /public/:key/business | → [PublicBusinessDto] |
 | POST | /public/:key/quote | [QuoteRequest] → `{ ok, quote? (Quote), error? }` |
 | POST | /public/:key/chat/start | → [PublicChatStartResponse] |
-| POST | /public/:key/chat/message | [PublicChatMessageRequest] → `{ messages: [...] }` |
+| POST | /public/:key/chat/message | [PublicChatMessageRequest] → `{ messages: [...] }` (only the assistant's new replies) |
 | POST | /public/:key/booking | [PublicBookingRequest] → [PublicBookingResponse] (stores TCPA consent evidence; creates contact, conversation, order) |
 | GET | /public/sites/by-host/:host | → `{ key }` (sites app resolves Host header → tenant) |
 

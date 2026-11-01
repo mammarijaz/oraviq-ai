@@ -171,7 +171,7 @@ export class VoiceService {
         providerCallId: input.providerCallId,
         agentId: input.agentId ?? null,
         callerNumber: e164,
-        callerName: contact.name,
+        callerName: contact.name ?? (input.simulated ? 'Test call' : null),
         startedAt: input.at,
         afterHours,
         status: 'in_progress',

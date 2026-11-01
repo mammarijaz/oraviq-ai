@@ -249,7 +249,7 @@ export class OrdersService implements OnModuleInit {
         await this.messaging.assertCanText(conv, tx);
         await this.messaging.addMessage(tx, conv, {
           author: 'assistant',
-          body: `Update from ${tenant.name}: your dumpster now arrives ${longDateLabel(iso)}${window ? `, ${lcFirst(window)}` : ''}. Reply here if that doesn't work.`,
+          body: `Update from ${tenant.name}: your dumpster now arrives ${longDateLabel(iso)}${window ? `, ${lcFirst(window).replace(/\.$/, '')}` : ''}. Reply here if that doesn't work.`,
         });
       }
       await this.audit.log('order.reschedule', 'order', id, { deliveryDate: iso, window, notify: req.notifyCustomer }, tx);

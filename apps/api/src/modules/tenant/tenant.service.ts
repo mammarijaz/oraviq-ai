@@ -261,7 +261,7 @@ export class TenantService {
         description: `On your business phone, forward calls you don't answer to ${n}, then make a test call. Verizon: dial *71 ${digits}. AT&T and T-Mobile: dial **004*${digits}#. Office phone systems: set "forward when unanswered" in the admin page. Codes vary by plan, so always test.`,
         status: forwardedCalls > 0 ? 'done' : 'todo',
         actionLabel: 'Run test call',
-        actionHref: '/setup/test-call',
+        actionHref: '/setup',
       },
       { key: 'receptionist', title: 'AI receptionist', description: 'Answers calls you miss with your greeting and your prices, and puts callers through to you when they ask.', status: rcp?.enabled ? 'done' : 'todo', actionLabel: 'Settings', actionHref: '/receptionist' },
       {
@@ -270,10 +270,10 @@ export class TenantService {
         description: 'US carriers require business texting to be registered (A2P 10DLC). We file it for you; approval usually takes a few days.',
         status: num?.registrationStatus === 'approved' ? 'done' : num?.registrationStatus === 'rejected' ? 'blocked' : num && num.registrationStatus !== 'not_started' ? 'in_review' : 'todo',
       },
-      { key: 'meta', title: 'Connect Facebook and Instagram', description: 'Messages to your Facebook Page and Instagram account arrive in your inbox, and the assistant answers them.', status: conn('facebook') && conn('instagram') ? 'done' : 'todo', actionLabel: 'Connect', actionHref: '/connections/facebook' },
-      { key: 'google', title: 'Connect your Google Business Profile', description: 'So you can read and reply to Google reviews here, and send review requests with your review link.', status: conn('google') ? 'done' : 'todo', actionLabel: 'Connect', actionHref: '/connections/google' },
+      { key: 'meta', title: 'Connect Facebook and Instagram', description: 'Messages to your Facebook Page and Instagram account arrive in your inbox, and the assistant answers them.', status: conn('facebook') && conn('instagram') ? 'done' : 'todo', actionLabel: 'Connect', actionHref: '/settings' },
+      { key: 'google', title: 'Connect your Google Business Profile', description: 'So you can read and reply to Google reviews here, and send review requests with your review link.', status: conn('google') ? 'done' : 'todo', actionLabel: 'Connect', actionHref: '/settings' },
       { key: 'website', title: 'Website', description: `Your free site ${site?.published ? 'is live' : 'is ready to publish'} at ${freeAddress}. Already have a site? Add the chat and booking widgets instead.`, status: site?.published ? 'done' : 'todo', actionLabel: 'Open', actionHref: '/website' },
-      { key: 'payments', title: 'Take deposits', description: 'Connect Stripe so confirmed orders include a deposit link. Money goes straight to your account.', status: conn('stripe') ? 'done' : 'todo', actionLabel: 'Connect', actionHref: '/connections/stripe' },
+      { key: 'payments', title: 'Take deposits', description: 'Connect Stripe so confirmed orders include a deposit link. Money goes straight to your account.', status: conn('stripe') ? 'done' : 'todo', actionLabel: 'Connect', actionHref: '/settings' },
     ];
   }
 
