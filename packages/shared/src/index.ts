@@ -365,6 +365,8 @@ export interface ReceptionistStatsDto {
 export interface TestCallTurnRequest {
   callId?: string;
   text: string;
+  /** Hang up after this turn (the call summary is returned). Saying "bye" also ends the call. */
+  end?: boolean;
 }
 export interface TestCallTurnResponse {
   callId: string;
@@ -517,6 +519,33 @@ export interface ChannelConnectionDto {
   provider: string;
   status: 'connected' | 'not_connected' | 'pending' | 'error';
   externalName: string | null;
+}
+
+/* ------------------------------------------------------------------ simulator and notifications */
+
+/** POST /simulator/inbound ("Try it out"). */
+export interface SimulatorInboundRequest {
+  channel: 'sms' | 'facebook' | 'instagram' | 'web_chat';
+  /** Phone number (sms) or a stable visitor id; defaults to (404) 555-0199 / a per-tenant visitor. */
+  from?: string;
+  name?: string;
+  body: string;
+  /** Close the previous simulated conversation for this sender and start fresh ("Start over"). */
+  newConversation?: boolean;
+}
+export interface SimulatorInboundResponse {
+  conversationId: string;
+  replies: MessageDto[];
+}
+
+/** GET /notifications: owner alerts (also texted to the alert phone and pushed to the PWA). */
+export interface NotificationDto {
+  id: string;
+  title: string;
+  body: string;
+  href: string | null;
+  createdAt: string;
+  read: boolean;
 }
 
 /* ------------------------------------------------------------------ realtime */

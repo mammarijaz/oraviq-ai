@@ -1,98 +1,67 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
-import { APP_FILTER, APP_INTERCEPTOR } from '@nestjs/core';
-import { ClsModule } from 'nestjs-cls';
+import { APP_FILTER, APP_GUARD } from '@nestjs/core';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { LoggerModule } from 'nestjs-pino';
+import { AuthGuard } from './common/auth.guard';
+import { AllExceptionsFilter } from './common/all-exceptions.filter';
+import { env } from './config/env';
+import { CoreModule } from './core/core.module';
+import { HealthController } from './health.controller';
+import { IntegrationsModule } from './integrations/integrations.module';
+import { AuthController } from './modules/auth/auth.controller';
+import { DevController } from './modules/dev/dev.controller';
+import { DomainModule } from './modules/domain.module';
+import { InboxController } from './modules/inbox/inbox.controller';
+import { NotificationsController } from './modules/notifications/notifications.controller';
+import { OrdersController } from './modules/orders/orders.controller';
+import { PricingController } from './modules/pricing/pricing.controller';
+import { PublicController } from './modules/public/public.controller';
+import { ReportsController } from './modules/reports/reports.controller';
+import { ReviewsController } from './modules/reviews/reviews.controller';
+import { SiteController } from './modules/site/site.controller';
+import { TenantController } from './modules/tenant/tenant.controller';
+import { ReceptionistController } from './modules/voice/receptionist.controller';
+import { WebhooksController } from './modules/webhooks/webhooks.controller';
+import { InboxGateway } from './realtime/inbox.gateway';
 
-import { AppController } from './app.controller';
-import { AppService } from './app.service';
-
-import { CommonModule } from './common/common.module';
-import { HttpExceptionFilter } from './common/filters/http-exception.filter';
-import { PrismaExceptionFilter } from './common/filters/prisma-exception.filter';
-import { TenantInterceptor } from './common/interceptors/tenant.interceptor';
-import { TransformInterceptor } from './common/interceptors/transform.interceptor';
-
-import { PrismaModule } from './prisma/prisma.module';
-
-import { AuthModule } from './modules/auth/auth.module';
-import { UsersModule } from './modules/users/users.module';
-import { OrganizationsModule } from './modules/organizations/organizations.module';
-import { ContactsModule } from './modules/contacts/contacts.module';
-import { ConversationsModule } from './modules/conversations/conversations.module';
-import { MessagesModule } from './modules/messages/messages.module';
-import { ChannelsModule } from './modules/channels/channels.module';
-import { AiModule } from './modules/ai/ai.module';
-import { TagsModule } from './modules/tags/tags.module';
-import { TemplatesModule } from './modules/templates/templates.module';
-import { AnalyticsModule } from './modules/analytics/analytics.module';
-import { NotificationsModule } from './modules/notifications/notifications.module';
-import { SocketModule } from './modules/socket/socket.module';
-import { WebhooksModule } from './modules/webhooks/webhooks.module';
-import { BillingModule } from './modules/billing/billing.module';
-import { WidgetModule } from './modules/widget/widget.module';
+export const loggerModule = () =>
+  LoggerModule.forRoot({
+    pinoHttp: {
+      level: env().LOG_LEVEL ?? (env().isTest ? 'silent' : 'info'),
+      transport: env().isProduction || env().isTest ? undefined : { target: 'pino-pretty', options: { singleLine: true, ignore: 'pid,hostname,req,res' } },
+      autoLogging: { ignore: (req) => (req.url ?? '').startsWith('/api/v1/health') },
+      redact: ['req.headers.authorization', 'req.headers.cookie'],
+    },
+  });
 
 @Module({
   imports: [
-    // Core configuration
-    ConfigModule.forRoot({ isGlobal: true }),
-    ClsModule.forRoot({ middleware: { mount: true } }),
-    LoggerModule.forRoot({
-      pinoHttp: {
-        transport:
-          process.env.NODE_ENV !== 'production'
-            ? { target: 'pino-pretty', options: { singleLine: true } }
-            : undefined,
-        autoLogging: true,
-        quietReqLogger: false,
-      },
-    }),
-
-    // Infrastructure
-    PrismaModule,
-    CommonModule,
-
-    // Feature modules
-    AuthModule,
-    UsersModule,
-    OrganizationsModule,
-    ContactsModule,
-    ConversationsModule,
-    MessagesModule,
-    ChannelsModule,
-    AiModule,
-    TagsModule,
-    TemplatesModule,
-    AnalyticsModule,
-    NotificationsModule,
-    SocketModule,
-    WebhooksModule,
-    BillingModule,
-    WidgetModule,
+    loggerModule(),
+    ThrottlerModule.forRoot({ throttlers: [{ name: 'default', ttl: 60000, limit: 120 }], skipIf: () => env().isTest }),
+    CoreModule,
+    IntegrationsModule,
+    DomainModule,
   ],
-  controllers: [AppController],
+  controllers: [
+    HealthController,
+    AuthController,
+    TenantController,
+    InboxController,
+    OrdersController,
+    PricingController,
+    ReceptionistController,
+    ReviewsController,
+    SiteController,
+    ReportsController,
+    PublicController,
+    WebhooksController,
+    NotificationsController,
+    DevController,
+  ],
   providers: [
-    AppService,
-
-    // Global exception filters (evaluated in reverse registration order)
-    {
-      provide: APP_FILTER,
-      useClass: HttpExceptionFilter,
-    },
-    {
-      provide: APP_FILTER,
-      useClass: PrismaExceptionFilter,
-    },
-
-    // Global interceptors
-    {
-      provide: APP_INTERCEPTOR,
-      useClass: TenantInterceptor,
-    },
-    {
-      provide: APP_INTERCEPTOR,
-      useClass: TransformInterceptor,
-    },
+    InboxGateway,
+    { provide: APP_GUARD, useClass: AuthGuard },
+    { provide: APP_FILTER, useClass: AllExceptionsFilter },
   ],
 })
 export class AppModule {}

@@ -1,150 +1,79 @@
-import {
-  ConflictException,
-  Injectable,
-  Logger,
-  NotFoundException,
-  UnauthorizedException,
-} from '@nestjs/common';
+import { BadRequestException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import type { AuthResponse, AuthTokens, RegisterRequest, Role, TenantDto, UserDto } from '@oraviq/shared';
 import * as bcrypt from 'bcrypt';
-import { v4 as uuidv4 } from 'uuid';
+import { createHash, randomBytes } from 'node:crypto';
+import type { AccessTokenPayload } from '../../common/auth.guard';
+import { env } from '../../config/env';
 import { PrismaService } from '../../prisma/prisma.service';
-import { ForgotPasswordDto } from './dto/forgot-password.dto';
-import { LoginDto } from './dto/login.dto';
-import { RegisterDto } from './dto/register.dto';
-import { ResetPasswordDto } from './dto/reset-password.dto';
+import { TenantService, toTenantDto } from '../tenant/tenant.service';
 
-const BCRYPT_ROUNDS = 10;
+const hash = (t: string) => createHash('sha256').update(t).digest('hex');
 
-export interface TokenPair {
-  accessToken: string;
-  refreshToken: string;
-}
-
+/** Email + password login, short-lived JWT access tokens, rotating opaque refresh tokens. */
 @Injectable()
 export class AuthService {
-  private readonly logger = new Logger(AuthService.name);
-
   constructor(
     private readonly prisma: PrismaService,
-    private readonly jwtService: JwtService,
+    private readonly jwt: JwtService,
+    private readonly tenants: TenantService,
   ) {}
 
-  async register(dto: RegisterDto): Promise<TokenPair> {
-    const hashedPassword = await bcrypt.hash(dto.password, BCRYPT_ROUNDS);
-
-    // Create org and admin user in a transaction
-    const result = await this.prisma.$transaction(async (tx) => {
-      const slug = dto.organizationName
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/(^-|-$)/g, '');
-
-      // Check if email already exists within a potential org
-      const existingUser = await tx.user.findFirst({
-        where: { email: dto.email },
-      });
-      if (existingUser) {
-        throw new ConflictException('Email already registered');
-      }
-
-      const organization = await tx.organization.create({
-        data: {
-          name: dto.organizationName,
-          slug: `${slug}-${Date.now()}`,
-        },
-      });
-
-      const user = await tx.user.create({
-        data: {
-          name: dto.name,
-          email: dto.email,
-          passwordHash: hashedPassword,
-          role: 'ADMIN',
-          status: 'ACTIVE',
-          organizationId: organization.id,
-        },
-      });
-
-      return { organization, user };
+  private async issue(userId: string, tenantId: string, role: Role, replacing?: string): Promise<AuthTokens> {
+    const e = env();
+    const payload: AccessTokenPayload = { sub: userId, tid: tenantId, role, typ: 'access' };
+    const accessToken = this.jwt.sign(payload, { expiresIn: e.ACCESS_TOKEN_TTL_SECONDS });
+    const refreshToken = `rt_${randomBytes(32).toString('base64url')}`;
+    const row = await this.prisma.refreshToken.create({
+      data: { userId, tenantId, tokenHash: hash(refreshToken), expiresAt: new Date(Date.now() + e.REFRESH_TOKEN_TTL_DAYS * 86400000) },
     });
-
-    return this.generateTokens(result.user);
+    if (replacing) await this.prisma.refreshToken.update({ where: { id: replacing }, data: { revokedAt: new Date(), replacedById: row.id } });
+    return { accessToken, refreshToken, expiresIn: e.ACCESS_TOKEN_TTL_SECONDS };
   }
 
-  async login(dto: LoginDto): Promise<TokenPair> {
-    const user = await this.validateUser(dto.email, dto.password);
-    if (!user) {
-      throw new UnauthorizedException('Invalid email or password');
+  private userDto(u: { id: string; name: string; email: string; phone: string | null }, role: Role): UserDto {
+    return { id: u.id, name: u.name, email: u.email, role, phone: u.phone };
+  }
+
+  async register(req: RegisterRequest): Promise<AuthResponse> {
+    const problems: string[] = [];
+    if (!req.businessName?.trim()) problems.push('Enter your business name.');
+    if (!req.ownerName?.trim()) problems.push('Enter your name.');
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(req.email ?? '')) problems.push('Enter a valid email.');
+    if (!req.password || req.password.length < 8) problems.push('Use a password of at least 8 characters.');
+    if (problems.length) throw new BadRequestException({ statusCode: 400, error: 'Bad Request', message: problems.join(' '), problems });
+    const { tenant, user, role } = await this.tenants.provision(req);
+    const tokens = await this.issue(user.id, tenant.id, role);
+    return { ...tokens, user: this.userDto(user, role), tenant: toTenantDto(tenant) };
+  }
+
+  async login(email: string, password: string): Promise<AuthResponse> {
+    const user = await this.prisma.user.findUnique({ where: { email: String(email ?? '').trim().toLowerCase() }, include: { memberships: { include: { tenant: true }, orderBy: { createdAt: 'asc' } } } });
+    const ok = user && !user.passwordHash.startsWith('!') && (await bcrypt.compare(String(password ?? ''), user.passwordHash));
+    if (!user || !ok) throw new UnauthorizedException('That email and password don\'t match.');
+    const m = user.memberships[0];
+    if (!m) throw new UnauthorizedException('This account is not part of a business yet.');
+    const tokens = await this.issue(user.id, m.tenantId, m.role);
+    return { ...tokens, user: this.userDto(user, m.role), tenant: toTenantDto(m.tenant) };
+  }
+
+  async refresh(refreshToken: string): Promise<AuthTokens> {
+    if (!refreshToken) throw new UnauthorizedException('Sign in again.');
+    const row = await this.prisma.refreshToken.findUnique({ where: { tokenHash: hash(refreshToken) } });
+    if (!row || row.expiresAt < new Date()) throw new UnauthorizedException('Your session has expired. Sign in again.');
+    if (row.revokedAt) {
+      // Reuse of a rotated token: revoke the whole family for this user.
+      await this.prisma.refreshToken.updateMany({ where: { userId: row.userId, revokedAt: null }, data: { revokedAt: new Date() } });
+      throw new UnauthorizedException('Your session has expired. Sign in again.');
     }
-    return this.generateTokens(user);
+    const m = await this.prisma.membership.findUnique({ where: { tenantId_userId: { tenantId: row.tenantId, userId: row.userId } } });
+    if (!m) throw new UnauthorizedException('You no longer have access to this business.');
+    return this.issue(row.userId, row.tenantId, m.role, row.id);
   }
 
-  async refreshToken(userId: string): Promise<TokenPair> {
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-    });
-    if (!user) {
-      throw new NotFoundException('User not found');
-    }
-    return this.generateTokens(user);
-  }
-
-  async forgotPassword(dto: ForgotPasswordDto): Promise<{ message: string }> {
-    // Return success regardless to avoid email enumeration
-    const user = await this.prisma.user.findFirst({
-      where: { email: dto.email },
-    });
-    if (user) {
-      // TODO: store a reset token (via metadata or separate table) and send an email.
-      // The User schema intentionally omits reset token fields.
-      const _resetToken = uuidv4();
-      this.logger.log(`Password reset requested for ${dto.email}`);
-    }
-
-    return { message: 'If that email exists, a reset link has been sent.' };
-  }
-
-  async resetPassword(dto: ResetPasswordDto): Promise<{ message: string }> {
-    // Placeholder: in production, look up a persisted reset token.
-    void dto;
-    throw new UnauthorizedException('Password reset is not yet implemented');
-  }
-
-  async validateUser(email: string, password: string): Promise<Omit<{
-    id: string;
-    email: string;
-    organizationId: string;
-    role: string;
-    name: string;
-    status: string;
-  }, 'passwordHash'> | null> {
-    const user = await this.prisma.user.findFirst({ where: { email } });
-    if (!user) return null;
-
-    const isMatch = await bcrypt.compare(password, user.passwordHash);
-    if (!isMatch) return null;
-
-    const { passwordHash: _pw, ...result } = user;
-    return result;
-  }
-
-  generateTokens(user: {
-    id: string;
-    email: string;
-    organizationId: string;
-    role: string;
-  }): TokenPair {
-    const payload = {
-      sub: user.id,
-      email: user.email,
-      orgId: user.organizationId,
-      role: user.role,
-    };
-
-    const accessToken = this.jwtService.sign(payload);
-    const refreshToken = this.jwtService.sign(payload, { expiresIn: '7d' });
-
-    return { accessToken, refreshToken };
+  async me(userId: string, tenantId: string): Promise<{ user: UserDto; tenant: TenantDto }> {
+    const m = await this.prisma.membership.findUnique({ where: { tenantId_userId: { tenantId, userId } }, include: { user: true, tenant: true } });
+    if (!m) throw new UnauthorizedException('Sign in again.');
+    return { user: this.userDto(m.user, m.role), tenant: toTenantDto(m.tenant) };
   }
 }

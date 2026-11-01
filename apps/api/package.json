@@ -7,24 +7,23 @@
   "license": "UNLICENSED",
   "scripts": {
     "build": "nest build",
-    "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
-    "start": "nest start",
+    "start": "node dist/main.js",
     "start:dev": "nest start --watch",
-    "start:debug": "nest start --debug --watch",
-    "start:prod": "node dist/main",
-    "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
-    "test": "jest",
-    "test:watch": "jest --watch",
-    "test:cov": "jest --coverage",
-    "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
-    "test:e2e": "jest --config ./test/jest-e2e.json",
+    "start:prod": "node dist/main.js",
+    "test": "jest --runInBand",
+    "test:e2e": "jest --runInBand --selectProjects e2e",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "db:generate": "prisma generate",
-    "db:seed": "ts-node -r tsconfig-paths/register prisma/seed.ts",
+    "db:seed": "ts-node --transpile-only prisma/seed.ts",
     "start:worker": "node dist/worker.js",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "dev": "nest start --watch"
+    "dev": "nest start --watch",
+    "dev:worker": "ts-node --transpile-only src/worker.ts",
+    "test:unit": "jest --runInBand --selectProjects unit",
+    "db:reset": "prisma migrate reset --force && ts-node --transpile-only prisma/seed.ts",
+    "postinstall": "prisma generate",
+    "lint": "eslint \"{src,test,prisma}/**/*.ts\""
   },
   "dependencies": {
     "@nestjs/bullmq": "^11.0.4",
@@ -96,23 +95,49 @@
     "@types/web-push": "^3.6.4"
   },
   "jest": {
-    "moduleFileExtensions": [
-      "js",
-      "json",
-      "ts"
-    ],
-    "rootDir": "src",
-    "testRegex": ".*\\.spec\\.ts$",
-    "transform": {
-      "^.+\\.(t|j)s$": "ts-jest"
-    },
-    "transformIgnorePatterns": [
-      "node_modules/(?!(uuid)/)"
-    ],
-    "collectCoverageFrom": [
-      "**/*.(t|j)s"
-    ],
-    "coverageDirectory": "../coverage",
-    "testEnvironment": "node"
+    "globalSetup": "<rootDir>/test/global-setup.ts",
+    "testTimeout": 30000,
+    "projects": [
+      {
+        "displayName": "unit",
+        "testEnvironment": "node",
+        "rootDir": ".",
+        "roots": [
+          "<rootDir>/src"
+        ],
+        "testRegex": ".*\\.spec\\.ts$",
+        "transform": {
+          "^.+\\.ts$": [
+            "ts-jest",
+            {
+              "tsconfig": "tsconfig.json"
+            }
+          ]
+        },
+        "setupFiles": [
+          "<rootDir>/test/env.ts"
+        ]
+      },
+      {
+        "displayName": "e2e",
+        "testEnvironment": "node",
+        "rootDir": ".",
+        "roots": [
+          "<rootDir>/test"
+        ],
+        "testRegex": ".*\\.e2e-spec\\.ts$",
+        "transform": {
+          "^.+\\.ts$": [
+            "ts-jest",
+            {
+              "tsconfig": "tsconfig.json"
+            }
+          ]
+        },
+        "setupFiles": [
+          "<rootDir>/test/env.ts"
+        ]
+      }
+    ]
   }
 }
