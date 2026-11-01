@@ -1,0 +1,46 @@
+/* Gallery layout only (not part of the library). */
+.g { display: grid; grid-template-columns: 248px minmax(0, 1fr); min-height: 100vh; }
+.g-side { position: sticky; top: 0; height: 100vh; box-sizing: border-box; padding: 32px 24px; border-right: 1px solid var(--line); display: flex; flex-direction: column; gap: 28px; background: var(--paper); }
+.g-side nav ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.g-side nav a { display: flex; align-items: center; gap: 12px; min-height: 40px; padding: 0 16px; border-radius: var(--radius-pill); color: var(--ink); text-decoration: none; font-weight: 500; }
+.g-side nav a:hover { background: var(--surface-muted); }
+.g-side nav a[aria-current="true"] { background: var(--secondary); font-weight: 600; }
+.g-side__foot { margin-top: auto; font-size: 13px; line-height: 19px; color: var(--ink-muted); }
+.g-main { min-width: 0; padding: 48px; display: flex; flex-direction: column; gap: 32px; }
+.g-sec { display: flex; flex-direction: column; gap: 20px; scroll-margin-top: 24px; }
+.g-sec > h2 { font: 800 28px/34px var(--font-display); letter-spacing: -.02em; margin: 16px 0 0; }
+.g-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 24px; align-items: start; }
+.g-grid--2 { grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); }
+.g-row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+.g-stack { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.g-h { margin: 0 0 12px; font: 600 13px/18px var(--font-text); color: var(--ink-muted); }
+.g-night { background: var(--night); border-radius: var(--radius-lg); padding: 24px; display: flex; gap: 24px; align-items: center; flex-wrap: wrap; }
+.g-inbox { display: grid; grid-template-columns: 310px minmax(0, 1fr) 340px; overflow: hidden; }
+.g-inbox__list { border-right: 1px solid var(--line); min-width: 0; }
+.g-inbox__tools { display: flex; flex-direction: column; gap: 10px; padding: 16px; border-bottom: 1px solid var(--line); }
+.g-inbox__thread { display: flex; flex-direction: column; min-width: 0; background: var(--paper); }
+.g-inbox__head { padding: 16px 24px; border-bottom: 1px solid var(--line); background: var(--surface); display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.g-inbox__head b { font: 800 18px/24px var(--font-display); letter-spacing: -.01em; }
+.g-inbox__thread .ov-thread { padding: 24px; flex: 1; }
+.g-inbox__compose { display: flex; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--line); background: var(--surface); }
+.g-inbox__compose .ov-input { border-radius: var(--radius-pill); padding: 9px 18px; }
+.g-inbox__side { border-left: 1px solid var(--line); padding: 24px; display: flex; flex-direction: column; gap: 24px; min-width: 0; }
+.g-kv { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; margin: 8px 0 12px; font-size: 13px; line-height: 19px; }
+.g-kv dt { color: var(--ink-muted); } .g-kv dd { margin: 0; text-align: right; font-weight: 600; }
+.g-icons { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; }
+.g-icons figure { margin: 0; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 4px; border-radius: var(--radius-sm); font-size: 12px; color: var(--ink-muted); }
+.g-icons figure:hover { background: var(--surface-muted); color: var(--ink); }
+.g-bottom-dd { display: flex; justify-content: flex-end; }
+.g-mobile-top { display: none; }
+@media (max-width: 1240px) { .g-inbox { grid-template-columns: 270px minmax(0, 1fr); } .g-inbox__side { grid-column: 1 / -1; border-left: 0; border-top: 1px solid var(--line); } .g-main { padding: 32px; } }
+@media (max-width: 900px) {
+  .g { grid-template-columns: 1fr; }
+  .g-side { position: static; height: auto; padding: 16px; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 12px; border-right: 0; border-bottom: 1px solid var(--line); }
+  .g-side nav ul { display: flex; flex-wrap: wrap; }
+  .g-side nav a { min-height: 36px; padding: 0 12px; font-size: 14px; }
+  .g-side__foot { display: none; }
+  .g-main { padding: 24px 16px; }
+  .g-inbox { grid-template-columns: 1fr; }
+  .g-inbox__list { border-right: 0; border-bottom: 1px solid var(--line); }
+  .g-grid, .g-grid--2 { grid-template-columns: minmax(0, 1fr); }
+}

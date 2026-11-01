@@ -1,0 +1,5 @@
+/* @oraviq/ui styles: tokens, the plain-CSS kit, then the Vue components' own CSS.
+   import '@oraviq/ui/styles.css' once in the app entry. */
+@import '@oraviq/ui-tokens/tokens.css';
+@import '@oraviq/ui-tokens/kit.css';
+@import './css/components.css';
