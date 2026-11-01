@@ -44,6 +44,8 @@ const jsonLd = {
     description: `${b.includedDays} days and ${formatTons(s.includedTons)} included`,
   })),
 };
+// JSON-LD goes inside <script>: escape <, > and & so a business name like "</script>" can't break out.
+const safeJsonLd = JSON.stringify(jsonLd).replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/&/g, '\\u0026');
 ---
 <!doctype html>
 <html lang="en">
@@ -58,7 +60,7 @@ const jsonLd = {
     <meta property="og:type" content="website" />
     <meta name="theme-color" content={b.accentColor} />
     <link rel="icon" href="/oraviq-favicon.svg" type="image/svg+xml" />
-    <script type="application/ld+json" set:html={JSON.stringify(jsonLd)} />
+    <script type="application/ld+json" set:html={safeJsonLd} />
   </head>
   <body>
     <a class="skip" href="#main">Skip to content</a>
