@@ -1,0 +1,106 @@
+# Render Blueprint: api + worker + hauler sites (Node), owner app + widgets (static), Postgres, Key Value.
+# Put Cloudflare in front (DNS, CDN, WAF, R2 for recordings, Cloudflare for SaaS custom hostnames).
+# Secrets marked sync: false are entered in the Render dashboard; unset provider keys run the mock adapters.
+databases:
+  - name: oraviq-db
+    plan: basic-1gb
+    databaseName: oraviq
+    user: oraviq
+
+services:
+  - type: keyvalue
+    name: oraviq-redis
+    plan: starter
+    maxmemoryPolicy: noeviction
+    ipAllowList: []
+
+  - type: web
+    name: oraviq-api
+    runtime: node
+    plan: standard
+    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm --filter @oraviq/api db:generate && pnpm turbo run build --filter=@oraviq/api... && pnpm --filter @oraviq/api db:deploy
+    startCommand: pnpm --filter @oraviq/api start:prod
+    healthCheckPath: /api/v1/health
+    envVars: &apiEnv
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase: { name: oraviq-db, property: connectionString }
+      - key: REDIS_URL
+        fromService: { type: keyvalue, name: oraviq-redis, property: connectionString }
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      - key: PUBLIC_API_URL
+        value: https://api.oraviq.com
+      - key: WEB_URL
+        value: https://app.oraviq.com
+      - key: WIDGETS_URL
+        value: https://widgets.oraviq.com
+      - key: SITES_BASE_DOMAIN
+        value: oraviq.site
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: ZERNIO_API_KEY
+        sync: false
+      - key: ZERNIO_WEBHOOK_SECRET
+        sync: false
+      - key: RETELL_API_KEY
+        sync: false
+      - key: RETELL_WEBHOOK_SECRET
+        sync: false
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: CLOUDFLARE_API_TOKEN
+        sync: false
+      - key: CLOUDFLARE_ZONE_ID
+        sync: false
+
+  - type: worker
+    name: oraviq-worker
+    runtime: node
+    plan: starter
+    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm --filter @oraviq/api db:generate && pnpm turbo run build --filter=@oraviq/api...
+    startCommand: pnpm --filter @oraviq/api start:worker
+    envVars: *apiEnv
+
+  - type: web
+    name: oraviq-sites
+    runtime: node
+    plan: starter
+    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm turbo run build --filter=@oraviq/sites...
+    startCommand: pnpm --filter @oraviq/sites start
+    envVars:
+      - key: PUBLIC_API_URL
+        value: https://api.oraviq.com
+      - key: WIDGETS_URL
+        value: https://widgets.oraviq.com
+
+  - type: web
+    name: oraviq-app
+    runtime: static
+    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm turbo run build --filter=@oraviq/web...
+    staticPublishPath: apps/web/dist
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: VITE_API_URL
+        value: https://api.oraviq.com
+
+  - type: web
+    name: oraviq-widgets
+    runtime: static
+    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm turbo run build --filter=@oraviq/widgets...
+    staticPublishPath: apps/widgets/dist
+    headers:
+      - path: /*
+        name: Cache-Control
+        value: public, max-age=300
+    envVars:
+      - key: VITE_API_URL
+        value: https://api.oraviq.com

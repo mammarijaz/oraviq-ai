@@ -1,0 +1,181 @@
+---
+import { formatMoney, formatTons } from '@oraviq/pricing';
+import { formatPhone, toE164 } from '@oraviq/shared';
+import '@oraviq/ui-tokens/tokens.css';
+import '../styles/site.css';
+import { loadSite, WIDGETS_URL } from '../lib/api';
+
+const site = await loadSite(Astro.request.headers.get('host') ?? 'localhost', Astro.url);
+if (!site) {
+  return new Response('This site is not set up yet.', { status: 404, headers: { 'content-type': 'text/plain; charset=utf-8' } });
+}
+
+// Cloudflare caches the page at the edge; the API purges it when prices, zones or reviews change.
+Astro.response.headers.set('Cache-Control', 'public, max-age=60, s-maxage=600, stale-while-revalidate=86400');
+
+const b = site.business;
+const S = b.site?.sections ?? { prices: true, how: true, area: true, reviews: true, booking: true, chat: true };
+const headline = b.site?.headline ?? `Dumpster rentals in ${b.city ?? 'your area'}, delivered fast.`;
+const intro = b.site?.intro ?? 'Get an instant price online or by text, day or night.';
+const phone = b.phone ? formatPhone(b.phone) : null;
+const tel = b.phone ? toE164(b.phone) : null;
+const place = [b.city, b.state].filter(Boolean).join(', ');
+const reviews = (b.reviews ?? []).filter((r) => r.rating >= 4).slice(0, 3);
+const zone1 = b.zones.find((z) => z.feeCents === 0);
+const title = `${b.name} · Dumpster rental${place ? ` in ${place}` : ''}`;
+const description = `${b.name} rents ${b.sizes.map((s) => `${s.yards}`).join(', ')}-yard roll-off dumpsters${place ? ` in ${place}` : ''}. Clear prices from ${formatMoney(Math.min(...b.sizes.map((s) => s.baseCents)))}, ${b.includedDays} days included. Get an instant price online.`;
+const star = (filled: boolean) => `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z" fill="${filled ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>`;
+const stars = (n: number) => `<span class="stars" role="img" aria-label="${n} out of 5 stars">${[1, 2, 3, 4, 5].map((i) => star(i <= n)).join('')}</span>`;
+const zipsLabel = (z: { zipsPreview: string[]; zipCount: number }) => z.zipsPreview.join(', ') + (z.zipCount > z.zipsPreview.length ? ` and ${z.zipCount - z.zipsPreview.length} more` : '');
+
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'LocalBusiness',
+  name: b.name,
+  telephone: tel ?? undefined,
+  url: site.canonical,
+  address: place ? { '@type': 'PostalAddress', addressLocality: b.city ?? undefined, addressRegion: b.state ?? undefined, addressCountry: 'US' } : undefined,
+  aggregateRating: b.googleRating && b.googleCount ? { '@type': 'AggregateRating', ratingValue: b.googleRating, reviewCount: b.googleCount } : undefined,
+  makesOffer: b.sizes.map((s) => ({
+    '@type': 'Offer',
+    name: `${s.yards}-yard roll-off dumpster rental`,
+    price: (s.baseCents / 100).toFixed(2),
+    priceCurrency: 'USD',
+    description: `${b.includedDays} days and ${formatTons(s.includedTons)} included`,
+  })),
+};
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={site.canonical} />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:type" content="website" />
+    <meta name="theme-color" content={b.accentColor} />
+    <link rel="icon" href="/oraviq-favicon.svg" type="image/svg+xml" />
+    <script type="application/ld+json" set:html={JSON.stringify(jsonLd)} />
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+    <div class="site" style={`--site:${b.accentColor}`}>
+      <header class="site-head">
+        <a class="site-brand" href="/" style="text-decoration:none"><i aria-hidden="true"></i>{b.name}</a>
+        <span style="display:flex;gap:14px;align-items:center;flex-wrap:wrap">
+          {phone && tel && <a class="small muted" href={`tel:${tel}`} style="text-decoration:none">{phone}</a>}
+          {S.booking && <a class="site-btn" style="min-height:40px;text-decoration:none" href="#price">Get a price</a>}
+        </span>
+      </header>
+
+      <main id="main">
+        <section class="site-hero">
+          <div class="site-wrap">
+            <h1 style="font:800 46px/50px var(--font-display);letter-spacing:-.025em;margin:0;max-width:640px" class="hero-title">{headline}</h1>
+            <p>{intro}</p>
+            <div class="actions" style="display:flex;gap:12px;flex-wrap:wrap;margin-top:24px">
+              {S.booking && <a class="site-btn" href="#price" style="text-decoration:none">Get an instant price</a>}
+              {S.chat && <button type="button" class="site-btn site-btn--ghost" data-oraviq-open-chat>Ask a question</button>}
+              {!S.booking && phone && tel && <a class="site-btn" href={`tel:${tel}`} style="text-decoration:none">Call {phone}</a>}
+            </div>
+            {S.reviews && b.googleRating && (
+              <div class="site-trust"><Fragment set:html={stars(Math.round(b.googleRating))} /> <b style="color:var(--ink)">{b.googleRating.toFixed(1)} on Google</b> · {b.googleCount} reviews</div>
+            )}
+          </div>
+        </section>
+
+        {S.prices && (
+          <section class="site-sec" aria-labelledby="sizes">
+            <div class="site-wrap">
+              <h2 id="sizes" class="h3">Sizes and prices</h2>
+              <p class="lead">Each price includes {b.includedDays} days{zone1 ? ` and delivery in ${zone1.name.toLowerCase()}` : ''}. Extra days are {formatMoney(b.extraDayCents)} each.</p>
+              <div class="size-grid">
+                {b.sizes.map((s) => (
+                  <div class="size-card">
+                    <b>{s.yards}-yard</b>
+                    <div class="p">{formatMoney(s.baseCents)}</div>
+                    <div class="small muted">{formatTons(s.includedTons)} included</div>
+                    {s.hint && <div class="small" style="margin-top:8px">{s.hint}</div>}
+                  </div>
+                ))}
+              </div>
+              <p class="small muted" style="margin-top:16px">Over the included weight: {formatMoney(b.overagePerTonCents)} per ton, from the landfill ticket.</p>
+            </div>
+          </section>
+        )}
+
+        {S.how && (
+          <section class="site-sec" aria-labelledby="how">
+            <div class="site-wrap">
+              <h2 id="how" class="h3">How it works</h2>
+              <p class="lead">Three steps, no paperwork.</p>
+              <div class="steps3">
+                <div><b>1. Get a price</b><span class="small muted">Online, by text or by phone, any time.</span></div>
+                <div><b>2. We drop it off</b><span class="small muted">On your driveway or where you ask, on the day you pick.</span></div>
+                <div><b>3. We haul it away</b><span class="small muted">Text us when you're done. Need more days? Just ask.</span></div>
+              </div>
+            </div>
+          </section>
+        )}
+
+        {S.area && (
+          <section class="site-sec" aria-labelledby="area">
+            <div class="site-wrap">
+              <h2 id="area" class="h3">Where we deliver</h2>
+              <p class="lead">Not sure if we reach you? Enter your ZIP in the price form.</p>
+              <div class="zones">
+                {b.zones.map((z) => (
+                  <div class="zone-row"><span><b>{z.name}</b> <span class="small muted">· {zipsLabel(z)}</span></span><b>{z.feeCents ? `+${formatMoney(z.feeCents)}` : 'Free delivery'}</b></div>
+                ))}
+              </div>
+            </div>
+          </section>
+        )}
+
+        {S.reviews && reviews.length > 0 && (
+          <section class="site-sec" aria-labelledby="reviews">
+            <div class="site-wrap">
+              <h2 id="reviews" class="h3">What customers say</h2>
+              <p class="lead">Real reviews from Google.</p>
+              <div class="site-reviews">
+                {reviews.map((r) => (
+                  <figure class="site-review" style="margin:0">
+                    <Fragment set:html={stars(r.rating)} />
+                    <blockquote style="margin:8px 0">{r.text}</blockquote>
+                    <figcaption class="small"><b>{r.author}</b></figcaption>
+                  </figure>
+                ))}
+              </div>
+            </div>
+          </section>
+        )}
+
+        {S.booking && (
+          <section class="site-sec" id="price" aria-labelledby="price-title">
+            <div class="site-wrap">
+              <h2 id="price-title" class="sr-only">Get an instant price</h2>
+              <div data-oraviq-booking>
+                <noscript>
+                  <div class="booking-fallback">Turn on JavaScript for an instant price, or {phone && tel ? <a href={`tel:${tel}`}>call {phone}</a> : 'call us'}.</div>
+                </noscript>
+              </div>
+            </div>
+          </section>
+        )}
+      </main>
+
+      <footer class="site-foot">
+        <div class="site-wrap">{b.name}{place ? ` · ${place}` : ''}{phone ? ` · ${phone}` : ''} · Website by Oraviq AI</div>
+      </footer>
+    </div>
+    <script async src={`${WIDGETS_URL}/w.js`} data-key={site.key} data-accent={b.accentColor} data-chat={S.chat ? 'true' : 'false'}></script>
+  </body>
+</html>
+
+<style is:global>
+  .site h2.h3 { font: 800 28px/34px var(--font-display); letter-spacing: -.02em; margin: 0 0 6px; }
+  @media (max-width: 640px) { .hero-title { font-size: 34px !important; line-height: 38px !important; } }
+</style>
