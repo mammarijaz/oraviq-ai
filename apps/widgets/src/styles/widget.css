@@ -1,0 +1,52 @@
+@import "@oraviq/ui-tokens/tokens.css";
+@import "@oraviq/ui-tokens/kit.css";
+/* Widgets use the hauler's colour (--site), never Oraviq violet. */
+:root { --site: #40454D; --ov-accent: var(--site); }
+*, *::before, *::after { box-sizing: border-box; }
+html, body { margin: 0; background: transparent; color: var(--ink); font: 400 15px/23px var(--font-text); }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.small { font-size: 13px; line-height: 19px; } .muted { color: var(--ink-muted); }
+.input { font: 400 15px/23px var(--font-text); color: var(--ink); background: var(--surface); border: 1px solid var(--line-control); border-radius: var(--radius-sm); padding: 9px 14px; min-height: 44px; width: 100%; }
+.input:focus { outline: 2px solid var(--ink); outline-offset: 1px; }
+.btn-site { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 48px; padding: 0 22px; border-radius: 999px; font: 600 15px/1 var(--font-text); border: 1.5px solid transparent; cursor: pointer; background: var(--site); color: #fff; width: 100%; }
+.btn-site[disabled] { opacity: .5; cursor: wait; }
+.btn-site:focus-visible, .btn-ghost:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.btn-ghost { display: inline-flex; align-items: center; justify-content: center; min-height: 40px; padding: 0 18px; border-radius: 999px; font: 600 14px/1 var(--font-text); cursor: pointer; background: transparent; border: 1.5px solid var(--ink); color: var(--ink); }
+
+/* booking */
+.bw { border: 1px solid var(--line); border-radius: 24px; padding: 24px; background: var(--surface); max-width: 680px; }
+.bw h1 { margin: 0 0 4px; font: 800 22px/28px var(--font-display); letter-spacing: -.015em; }
+.bw-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 16px; }
+.bw-grid .full { grid-column: 1 / -1; }
+.bw .l { font: 600 13px/18px var(--font-text); display: block; margin-bottom: 6px; }
+.bw-quote { margin-top: 16px; border-radius: 18px; background: var(--surface-muted); padding: 14px 18px; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; min-height: 72px; }
+.bw-quote .t { font: 800 32px/36px var(--font-display); letter-spacing: -.02em; }
+.bw-consent { display: flex; gap: 10px; align-items: flex-start; font-size: 13px; line-height: 19px; color: var(--ink-muted); margin-top: 14px; }
+.bw-err { color: var(--danger); font-size: 13px; margin: 8px 0 0; min-height: 19px; }
+.bw-done { text-align: center; padding: 24px 8px; }
+.bw-done b { display: block; font: 800 22px/28px var(--font-display); margin-bottom: 6px; }
+.bw-foot { font-size: 11px; color: var(--ink-muted); text-align: center; margin-top: 12px; }
+@media (max-width: 560px) { .bw { padding: 18px; border-radius: 18px; } .bw-grid { grid-template-columns: 1fr; } }
+
+/* chat (fills the iframe) */
+html.chat, html.chat body { height: 100%; background: var(--surface); }
+.wchat { height: 100%; display: flex; flex-direction: column; background: var(--surface); }
+.wchat-head { background: var(--site); color: #fff; padding: 14px 16px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.wchat-head b { display: block; font: 800 16px/20px var(--font-display); }
+.wchat-head span { font-size: 12px; opacity: .9; }
+.wchat-head button { background: transparent; border: 0; color: #fff; cursor: pointer; width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; }
+.wchat-head button:focus-visible { outline: 2px solid #fff; }
+.wchat-thread { flex: 1; overflow: auto; padding: 14px; display: flex; flex-direction: column; gap: 8px; background: var(--paper); }
+.wmsg { max-width: 84%; padding: 9px 13px; border-radius: 16px; font-size: 14px; line-height: 20px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.wmsg--them { align-self: flex-start; background: var(--surface); border: 1px solid var(--line); border-bottom-left-radius: 4px; }
+.wmsg--me { align-self: flex-end; background: var(--site); color: #fff; border-bottom-right-radius: 4px; }
+.wmsg--typing { color: var(--ink-muted); }
+.wmsg--typing i { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: currentColor; margin: 0 2px; animation: blink 1.2s infinite both; }
+.wmsg--typing i:nth-child(2) { animation-delay: .2s; } .wmsg--typing i:nth-child(3) { animation-delay: .4s; }
+@keyframes blink { 0%, 80%, 100% { opacity: .2; } 40% { opacity: 1; } }
+.wchat form { display: flex; gap: 6px; padding: 10px; border-top: 1px solid var(--line); }
+.wchat form .input { border-radius: 999px; min-height: 42px; padding: 6px 16px; font-size: 14px; }
+.wchat form button { min-height: 42px; padding: 0 16px; border-radius: 999px; border: 0; background: var(--site); color: #fff; font: 600 14px var(--font-text); cursor: pointer; }
+.wchat-foot { font-size: 11px; color: var(--ink-muted); text-align: center; padding: 0 0 8px; }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; padding: 0 10px 8px; }
+.chips button { border: 1px solid var(--line-control); background: var(--surface); color: var(--ink); border-radius: 999px; font: 500 13px/1 var(--font-text); min-height: 32px; padding: 0 12px; cursor: pointer; }
