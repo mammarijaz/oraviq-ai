@@ -117,6 +117,13 @@
     if (e.data.type === 'oraviq:resize') {
       const f = bookingFrames.find((x) => x.contentWindow === src);
       if (f && typeof e.data.height === 'number') f.style.height = `${Math.ceil(e.data.height) + 4}px`;
+    } else if (e.data.type === 'oraviq:reveal' && typeof e.data.bottom === 'number') {
+      const f = bookingFrames.find((x) => x.contentWindow === src);
+      if (f) {
+        const top = f.getBoundingClientRect().top;
+        const overflow = top + e.data.bottom + 16 - window.innerHeight;
+        if (overflow > 0) window.scrollBy({ top: Math.min(overflow, Math.max(0, top + e.data.top - 16)), behavior: 'smooth' });
+      }
     } else if (e.data.type === 'oraviq:close' && chatFrame && src === chatFrame.contentWindow) {
       closeChat();
     } else if (e.data.type === 'oraviq:booked') {

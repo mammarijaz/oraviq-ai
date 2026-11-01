@@ -34,6 +34,12 @@ export function autoResize(el: HTMLElement) {
     });
     h = Math.ceil(h);
     if (Math.abs(h - last) > 1) { last = h; post('oraviq:resize', { height: h }); }
+    // Ask the host page to scroll so an open dropdown or calendar is fully on screen.
+    const open = document.querySelector<HTMLElement>('.ov-dd__panel:not([hidden]), .ov-date__panel:not([hidden])');
+    if (open) {
+      const r = open.getBoundingClientRect();
+      if (r.height > 0) post('oraviq:reveal', { top: r.top, bottom: r.bottom });
+    }
   };
   new ResizeObserver(send).observe(el);
   new MutationObserver(send).observe(el, { subtree: true, childList: true, attributes: true, attributeFilter: ['hidden'] });
