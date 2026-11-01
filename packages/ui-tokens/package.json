@@ -1,0 +1,8 @@
+{
+  "name": "@oraviq/ui-tokens",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Oraviq design tokens (CSS custom properties) and the plain-CSS component kit, shared by the owner app, widgets and hauler sites.",
+  "exports": { "./tokens.css": "./tokens.css", "./kit.css": "./kit.css", "./tokens.json": "./tokens.json" },
+  "files": ["tokens.css", "kit.css", "tokens.json"]
+}

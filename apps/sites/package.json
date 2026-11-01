@@ -1,0 +1,21 @@
+{
+  "name": "@oraviq/sites",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Hauler websites: Astro SSR, one page per tenant resolved from the Host header.",
+  "type": "module",
+  "scripts": {
+    "dev": "astro dev --port 4321",
+    "build": "astro build",
+    "start": "node dist/server/entry.mjs",
+    "typecheck": "astro check"
+  },
+  "dependencies": {
+    "@astrojs/node": "^9.3.0",
+    "@oraviq/pricing": "workspace:*",
+    "@oraviq/shared": "workspace:*",
+    "@oraviq/ui-tokens": "workspace:*",
+    "astro": "^5.12.0"
+  },
+  "devDependencies": { "typescript": "^5.7.3" }
+}

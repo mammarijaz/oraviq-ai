@@ -1,0 +1,46 @@
+/* Oraviq design tokens v4 (graphite, lavender secondary, violet accent). Generated from the design system tokens.json. */
+@import url("https://fonts.googleapis.com/css2?family=Red+Hat+Display:wght@700;800&family=Red+Hat+Text:wght@400;500;600;700&display=swap");
+:root {
+  --paper: #FAFAFA;
+  --surface: #FFFFFF;
+  --surface-muted: #F2F3F5;
+  --ink: #40454D;
+  --ink-muted: #62676F;
+  --line: #E3E5E8;
+  --line-strong: #40454D;
+  --line-control: #868B93;
+  --secondary: #ECE8FD;
+  --secondary-hover: #E0DAFB;
+  --secondary-line: #D3C9FA;
+  --on-secondary: var(--ink);
+  --night: var(--ink);
+  --night-raised: #4C525A;
+  --on-night: #FFFFFF;
+  --on-night-muted: #C4C8CE;
+  --signal: #6A4CE0;
+  --signal-text: #5B3FD6;
+  --signal-tint: #EFEBFD;
+  --on-signal: #FFFFFF;
+  --signal-hover: #5B3FD6;
+  --signal-on-night: #BBABFF;
+  --success: #177245;
+  --danger: #C8261B;
+  --danger-tint: #FCE9E7;
+  --warning: #8F5B00;
+  --warning-tint: #FFF4DB;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --space-8: 96px;
+  --radius-sm: 10px;
+  --radius-md: 16px;
+  --radius-lg: 28px;
+  --radius-pill: 999px;
+  --shadow-pop: 0 12px 32px rgba(64,69,77,0.18);
+  --font-display: "Red Hat Display", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-text: "Red Hat Text", system-ui, -apple-system, "Segoe UI", sans-serif;
+}

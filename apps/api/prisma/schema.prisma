@@ -1,0 +1,368 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  extensions = [pgvector(map: "vector")]
+}
+
+model Organization {
+  id        String   @id @default(uuid())
+  name      String
+  slug      String   @unique
+  industry  String?
+  timezone  String   @default("UTC")
+  logo      String?
+  plan      String   @default("starter") // starter, pro, enterprise
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users            User[]
+  contacts         Contact[]
+  conversations    Conversation[]
+  channelAccounts  ChannelAccount[]
+  cannedResponses  CannedResponse[]
+  kbArticles       KnowledgeBaseArticle[]
+  aiConfigurations AiConfiguration[]
+  tags             Tag[]
+  businessHours    BusinessHours[]
+  webhookEvents    WebhookEvent[]
+  billingEvents    BillingEvent[]
+
+  @@map("organizations")
+}
+
+model User {
+  id             String     @id @default(uuid())
+  organizationId String
+  email          String
+  passwordHash   String
+  name           String
+  role           UserRole   @default(AGENT)
+  avatar         String?
+  status         UserStatus @default(ACTIVE)
+  lastActiveAt   DateTime?
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  organization          Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  assignedConversations Conversation[] @relation("AssignedAgent")
+  sentMessages          Message[]
+  internalNotes         InternalNote[]
+
+  @@unique([organizationId, email])
+  @@map("users")
+}
+
+enum UserRole {
+  ADMIN
+  AGENT
+  VIEWER
+}
+
+enum UserStatus {
+  ACTIVE
+  INVITED
+  DISABLED
+}
+
+model Contact {
+  id             String      @id @default(uuid())
+  organizationId String
+  name           String
+  email          String?
+  phone          String?
+  avatar         String?
+  channel        ChannelType
+  metadata       Json?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  organization  Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  conversations Conversation[]
+  contactTags   ContactTag[]
+
+  @@index([organizationId])
+  @@map("contacts")
+}
+
+enum ChannelType {
+  WHATSAPP
+  INSTAGRAM
+  SMS
+  LIVECHAT
+  VOICE
+  EMAIL
+}
+
+model ChannelAccount {
+  id             String               @id @default(uuid())
+  organizationId String
+  channel        ChannelType
+  name           String
+  credentials    Json // encrypted channel credentials
+  config         Json? // channel-specific config
+  status         ChannelAccountStatus @default(DISCONNECTED)
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  organization  Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  conversations Conversation[]
+
+  @@index([organizationId])
+  @@map("channel_accounts")
+}
+
+enum ChannelAccountStatus {
+  CONNECTED
+  DISCONNECTED
+  ERROR
+}
+
+model Conversation {
+  id               String             @id @default(uuid())
+  organizationId   String
+  contactId        String
+  channelAccountId String?
+  channel          ChannelType
+  status           ConversationStatus @default(OPEN)
+  assigneeId       String?
+  subject          String?
+  metadata         Json?
+  lastMessageAt    DateTime?
+  closedAt         DateTime?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  organization     Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  contact          Contact         @relation(fields: [contactId], references: [id])
+  channelAccount   ChannelAccount? @relation(fields: [channelAccountId], references: [id])
+  assignee         User?           @relation("AssignedAgent", fields: [assigneeId], references: [id])
+  messages         Message[]
+  internalNotes    InternalNote[]
+  conversationTags ConversationTag[]
+
+  @@index([organizationId, status])
+  @@index([organizationId, contactId])
+  @@index([assigneeId])
+  @@map("conversations")
+}
+
+enum ConversationStatus {
+  OPEN
+  PENDING
+  RESOLVED
+  SNOOZED
+}
+
+model Message {
+  id             String           @id @default(uuid())
+  conversationId String
+  senderId       String? // null for system/AI messages
+  direction      MessageDirection
+  type           MessageType      @default(TEXT)
+  content        String
+  metadata       Json?
+  externalId     String? // channel message ID
+  createdAt      DateTime         @default(now())
+
+  conversation Conversation       @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender       User?              @relation(fields: [senderId], references: [id])
+  attachments  MessageAttachment[]
+
+  @@index([conversationId, createdAt])
+  @@map("messages")
+}
+
+enum MessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  FILE
+  AUDIO
+  VIDEO
+  SYSTEM
+  AI
+  TEMPLATE
+}
+
+model MessageAttachment {
+  id        String   @id @default(uuid())
+  messageId String
+  type      String // mime type
+  url       String
+  name      String
+  size      Int?
+  createdAt DateTime @default(now())
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@map("message_attachments")
+}
+
+model InternalNote {
+  id             String   @id @default(uuid())
+  conversationId String
+  authorId       String
+  content        String
+  createdAt      DateTime @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  author       User         @relation(fields: [authorId], references: [id])
+
+  @@map("internal_notes")
+}
+
+model CannedResponse {
+  id             String   @id @default(uuid())
+  organizationId String
+  title          String
+  shortcut       String
+  content        String
+  category       String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@map("canned_responses")
+}
+
+model KnowledgeBaseArticle {
+  id             String                      @id @default(uuid())
+  organizationId String
+  title          String
+  content        String
+  category       String?
+  embedding      Unsupported("vector(1536)")?
+  isPublished    Boolean                     @default(false)
+  views          Int                         @default(0)
+  createdAt      DateTime                    @default(now())
+  updatedAt      DateTime                    @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@map("knowledge_base_articles")
+}
+
+model AiConfiguration {
+  id               String  @id @default(uuid())
+  organizationId   String  @unique
+  enabled          Boolean @default(false)
+  personality      String  @default("professional")
+  language         String  @default("en")
+  responseStyle    String  @default("concise")
+  instructions     String?
+  outsideHoursOnly Boolean @default(false)
+  escalationRules  Json?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("ai_configurations")
+}
+
+model Tag {
+  id             String   @id @default(uuid())
+  organizationId String
+  name           String
+  color          String   @default("#6B7280")
+  createdAt      DateTime @default(now())
+
+  organization     Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  contactTags      ContactTag[]
+  conversationTags ConversationTag[]
+
+  @@unique([organizationId, name])
+  @@map("tags")
+}
+
+model ContactTag {
+  contactId String
+  tagId     String
+
+  contact Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  tag     Tag     @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([contactId, tagId])
+  @@map("contact_tags")
+}
+
+model ConversationTag {
+  conversationId String
+  tagId          String
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  tag          Tag          @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([conversationId, tagId])
+  @@map("conversation_tags")
+}
+
+model BusinessHours {
+  id             String  @id @default(uuid())
+  organizationId String
+  dayOfWeek      Int // 0=Sunday, 6=Saturday
+  isOpen         Boolean @default(true)
+  openTime       String  @default("09:00")
+  closeTime      String  @default("17:00")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, dayOfWeek])
+  @@map("business_hours")
+}
+
+model VoiceCall {
+  id             String           @id @default(uuid())
+  conversationId String?
+  externalCallId String?
+  direction      MessageDirection
+  status         String // ringing, active, completed, failed
+  duration       Int? // seconds
+  recordingUrl   String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  @@map("voice_calls")
+}
+
+model WebhookEvent {
+  id             String      @id @default(uuid())
+  organizationId String
+  channel        ChannelType
+  eventType      String
+  payload        Json
+  status         String      @default("pending") // pending, processed, failed
+  processedAt    DateTime?
+  createdAt      DateTime    @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, status])
+  @@map("webhook_events")
+}
+
+model BillingEvent {
+  id             String   @id @default(uuid())
+  organizationId String
+  type           String // subscription, payment, refund
+  amount         Decimal?
+  currency       String   @default("USD")
+  stripeEventId  String?
+  metadata       Json?
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("billing_events")
+}
