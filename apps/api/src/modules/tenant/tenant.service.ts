@@ -63,11 +63,10 @@ export class TenantService {
     const email = input.email.trim().toLowerCase();
     if (await this.dbs.system.user.findUnique({ where: { email } })) throw new ConflictException('That email already has an account. Sign in instead.');
     const passwordHash = await bcrypt.hash(input.password, 10);
-    let number = await this.telephony.provisionNumber({ tenantId: randomBytes(8).toString('hex'), areaCode: phone ? phone.slice(2, 5) : null });
-    for (let i = 0; i < 8 && (await this.dbs.system.phoneNumber.findUnique({ where: { e164: number.e164 } })); i++) {
-      number = await this.telephony.provisionNumber({ tenantId: randomBytes(8).toString('hex'), areaCode: phone ? phone.slice(2, 5) : null });
-    }
     const provider = this.router.defaultProvider();
+    // Real numbers cost money, so sign-up doesn't buy one: the owner gets it from Setup (POST /setup/number).
+    // Mock numbers are free, so demos and tests still get one straight away.
+    const number = provider === 'mock' || env().PROVISION_NUMBER_ON_SIGNUP ? await this.buyNumber(phone) : null;
     return this.dbs.system.$transaction(async (tx) => {
       const slug = await this.uniqueSlug(slugify(input.businessName), tx as unknown as SystemTx);
       const tenant = await tx.tenant.create({
@@ -80,7 +79,7 @@ export class TenantService {
           timezone: 'America/New_York',
           businessHours: DEFAULT_BUSINESS_HOURS as unknown as Prisma.InputJsonValue,
           publishableKey: newPublishableKey(),
-          oraviqNumber: number.e164,
+          oraviqNumber: number?.e164 ?? null,
           alertPhone: phone,
         },
       });
@@ -92,7 +91,35 @@ export class TenantService {
     });
   }
 
-  async createDefaults(tx: SystemTx, tenant: Tenant, opts: { number: { e164: string; provider: string; providerNumberId: string }; provider: string; transferNumber: string | null }): Promise<void> {
+  private async buyNumber(businessPhone: string | null) {
+    const areaCode = businessPhone ? businessPhone.slice(2, 5) : null;
+    let number = await this.telephony.provisionNumber({ tenantId: randomBytes(8).toString('hex'), areaCode });
+    for (let i = 0; i < 8 && (await this.dbs.system.phoneNumber.findUnique({ where: { e164: number.e164 } })); i++) {
+      number = await this.telephony.provisionNumber({ tenantId: randomBytes(8).toString('hex'), areaCode });
+    }
+    return number;
+  }
+
+  /** Setup: buy the tenant's Oraviq number on demand. Idempotent: returns the existing number if there is one. */
+  async provisionOraviqNumber(): Promise<{ e164: string; display: string }> {
+    const tenantId = this.dbs.tenantId;
+    const tenant = await this.dbs.system.tenant.findUniqueOrThrow({ where: { id: tenantId } });
+    if (tenant.oraviqNumber) return { e164: tenant.oraviqNumber, display: displayPhone(tenant.oraviqNumber) };
+    const number = await this.buyNumber(tenant.phone);
+    await this.dbs.system.$transaction(async (tx) => {
+      // Re-check inside the transaction so two clicks can't buy two numbers' worth of records.
+      const fresh = await tx.tenant.findUniqueOrThrow({ where: { id: tenantId } });
+      if (fresh.oraviqNumber) return;
+      await tx.tenant.update({ where: { id: tenantId }, data: { oraviqNumber: number.e164 } });
+      await tx.phoneNumber.create({ data: { tenantId, e164: number.e164, provider: number.provider, providerNumberId: number.providerNumberId, forwardingFrom: tenant.phone, registrationStatus: 'in_review', voiceRoute: 'receptionist' } });
+      await tx.channelAccount.updateMany({ where: { tenantId, kind: { in: ['sms', 'phone'] } }, data: { status: 'connected', externalAccountId: number.providerNumberId, externalName: displayPhone(number.e164) } });
+      await tx.auditLog.create({ data: { tenantId, action: 'number.provision', entityType: 'tenant', entityId: tenantId, data: { e164: number.e164 } } });
+    });
+    const after = await this.dbs.system.tenant.findUniqueOrThrow({ where: { id: tenantId } });
+    return { e164: after.oraviqNumber!, display: displayPhone(after.oraviqNumber) };
+  }
+
+  async createDefaults(tx: SystemTx, tenant: Tenant, opts: { number: { e164: string; provider: string; providerNumberId: string } | null; provider: string; transferNumber: string | null }): Promise<void> {
     const tenantId = tenant.id;
     await tx.priceTable.create({ data: { tenantId, version: 1, rules: priceTableRules() as unknown as Prisma.InputJsonValue } });
     await tx.receptionistSettings.create({ data: { tenantId, ...receptionistDefaults(tenant.name), transferNumber: opts.transferNumber } });
@@ -101,18 +128,18 @@ export class TenantService {
     void _business;
     await tx.siteSettings.create({ data: { tenantId, slug: tenant.slug, ...site } });
     await tx.widgetSettings.create({ data: { tenantId, ...widgetDefaults(tenant.name) } });
-    await tx.phoneNumber.create({ data: { tenantId, e164: opts.number.e164, provider: opts.number.provider, providerNumberId: opts.number.providerNumberId, forwardingFrom: tenant.phone, registrationStatus: 'in_review', voiceRoute: 'receptionist' } });
+    if (opts.number) await tx.phoneNumber.create({ data: { tenantId, e164: opts.number.e164, provider: opts.number.provider, providerNumberId: opts.number.providerNumberId, forwardingFrom: tenant.phone, registrationStatus: 'in_review', voiceRoute: 'receptionist' } });
     const mock = opts.provider === 'mock';
     for (const kind of CONNECTION_KINDS) {
-      const connected = kind === 'sms' || kind === 'phone' || (kind === 'stripe' && this.payments.provider === 'mock');
+      const connected = ((kind === 'sms' || kind === 'phone') && !!opts.number) || (kind === 'stripe' && this.payments.provider === 'mock');
       await tx.channelAccount.create({
         data: {
           tenantId,
           kind,
           provider: kind === 'stripe' ? this.payments.provider : opts.provider,
           status: connected ? 'connected' : 'not_connected',
-          externalAccountId: kind === 'sms' || kind === 'phone' ? opts.number.providerNumberId : null,
-          externalName: kind === 'sms' || kind === 'phone' ? displayPhone(opts.number.e164) : kind === 'stripe' && connected ? (mock ? 'Test payments' : null) : null,
+          externalAccountId: (kind === 'sms' || kind === 'phone') && opts.number ? opts.number.providerNumberId : null,
+          externalName: (kind === 'sms' || kind === 'phone') && opts.number ? displayPhone(opts.number.e164) : kind === 'stripe' && connected ? (mock ? 'Test payments' : null) : null,
         },
       });
     }
@@ -254,11 +281,13 @@ export class TenantService {
     return [
       { key: 'business', title: 'Business details', description: 'Name, yard address, hours and the phone you want alerts on.', status: tenant.name && tenant.phone ? 'done' : 'todo', actionLabel: 'Edit', actionHref: '/settings' },
       { key: 'pricing', title: 'Pricing rules', description: 'Sizes, base prices, included tons, zones and item fees.', status: price ? 'done' : 'todo', actionLabel: 'Edit', actionHref: '/pricing' },
-      { key: 'number', title: 'Your Oraviq number', description: `${n || 'A number'} is reserved for you. Customers keep calling your usual number.`, status: tenant.oraviqNumber ? 'done' : 'todo' },
+      tenant.oraviqNumber
+        ? { key: 'number', title: 'Your Oraviq number', description: `${n} is reserved for you. Customers keep calling your usual number.`, status: 'done' }
+        : { key: 'number', title: 'Your Oraviq number', description: 'Get a local number that answers the calls you miss and sends your texts. Customers keep calling your usual number.', status: 'todo', actionLabel: 'Get my number' },
       {
         key: 'forwarding',
         title: 'Forward unanswered calls',
-        description: `On your business phone, forward calls you don't answer to ${n}, then make a test call. Verizon: dial *71 ${digits}. AT&T and T-Mobile: dial **004*${digits}#. Office phone systems: set "forward when unanswered" in the admin page. Codes vary by plan, so always test.`,
+        description: !tenant.oraviqNumber ? 'Once you have your Oraviq number, forward the calls you miss to it and make a test call.' : `On your business phone, forward calls you don't answer to ${n}, then make a test call. Verizon: dial *71 ${digits}. AT&T and T-Mobile: dial **004*${digits}#. Office phone systems: set "forward when unanswered" in the admin page. Codes vary by plan, so always test.`,
         status: forwardedCalls > 0 ? 'done' : 'todo',
         actionLabel: 'Run test call',
         actionHref: '/setup',

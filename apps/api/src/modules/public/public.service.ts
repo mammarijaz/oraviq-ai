@@ -5,7 +5,7 @@ import type { Tenant } from '@prisma/client';
 import { randomBytes } from 'node:crypto';
 import { z } from 'zod';
 import { ProblemsException } from '../../common/errors';
-import { displayPhone, normalizePhone } from '../../common/phone';
+import { displayPhone, isTextableNumber, normalizePhone } from '../../common/phone';
 import { clockLabel, resolveDayPhrase, shortDateLabel } from '../../common/time';
 import { env } from '../../config/env';
 import { TenantContext } from '../../core/tenant-context';
@@ -144,7 +144,7 @@ export class PublicService {
       const req = parsed.data;
       // US numbers only: the form texts whatever number it is given (no SMS pumping to premium international ranges).
       const phone = normalizePhone(req.phone);
-      if (!phone || !/^\+1[2-9]\d{9}$/.test(phone)) throw new ProblemsException('Enter a 10-digit mobile number.', ['Enter a 10-digit mobile number.']);
+      if (!phone || !isTextableNumber(phone)) throw new ProblemsException('Enter a 10-digit mobile number.', ['Enter a 10-digit mobile number.']);
       if (!req.consent || !req.consentText) throw new ProblemsException('Tick the box so we can text you about this order.', ['Tick the box so we can text you about this order.']);
       // The ledger records TEXT_CONSENT_VERSION, so the evidence must be that disclosure, not any string.
       const squash = (s: string) => s.replace(/\s+/g, ' ').trim();
@@ -166,7 +166,9 @@ export class PublicService {
 
       const out = await this.dbs.tx(async (tx) => {
         const contact = await this.contacts.findOrCreate('booking_form', phone, { name: req.name }, tx);
-        await this.contacts.grant(tx, {
+        // A web form can't undo STOP: only a START texted from the customer's own phone can.
+        const optedOut = await this.contacts.isOptedOut(contact.id, 'sms', tx);
+        if (!optedOut) await this.contacts.grant(tx, {
           contactId: contact.id,
           channel: 'sms',
           purpose: 'transactional',
@@ -207,8 +209,9 @@ export class PublicService {
         const reply = q.ok
           ? `Thanks${first ? `, ${first}` : ''}. We got your request for a ${q.quote.yards}-yard on ${dateLabel}: ${formatMoney(q.quote.totalCents)} delivered. We'll text you to confirm the delivery time.`
           : `Thanks${first ? `, ${first}` : ''}. We got your request for ${dateLabel}. We'll text you a price and delivery time shortly.`;
-        await this.messaging.addMessage(tx, conv, { author: 'assistant', body: reply, quoteId: q.ok ? q.quoteId : null, aiGenerated: false });
-        const handoff = q.ok ? null : `ZIP ${zip} is outside your zones; price needed`;
+        if (optedOut) await this.messaging.addSystem(tx, conv, 'This customer replied STOP earlier, so no confirmation text was sent. Call them to confirm.');
+        else await this.messaging.addMessage(tx, conv, { author: 'assistant', body: reply, quoteId: q.ok ? q.quoteId : null, aiGenerated: false });
+        const handoff = optedOut ? 'Customer opted out of texts (replied STOP). Call them to confirm.' : q.ok ? null : `ZIP ${zip} is outside your zones; price needed`;
         await tx.conversation.update({ where: { id: conv.id }, data: { state: 'needs_you', tag: 'Order to confirm', handoffReason: handoff, aiState: { introduced: true, stage: 'booked' }, facts: { yards: req.yards, days: req.days, zip, debris: req.debris, address: req.address, date: dateLabel, placement: 'driveway', name: req.name } } });
         await this.notifications.notifyOwner(tx, {
           title: 'New order',

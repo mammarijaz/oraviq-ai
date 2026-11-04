@@ -32,6 +32,16 @@ export class InboxGateway implements OnGatewayInit, OnGatewayConnection {
       client.data.tenantId = p.tid;
       client.data.userId = p.sub;
       await client.join(`tenant:${p.tid}`);
+      // Drop the socket when its access token expires; the client reconnects with a fresh token.
+      const exp = (p as { exp?: number }).exp;
+      if (exp) {
+        const ms = Math.max(0, exp * 1000 - Date.now());
+        const timer = setTimeout(() => {
+          client.emit('error', { message: 'Token expired' });
+          client.disconnect(true);
+        }, Math.min(ms, 2_147_000_000));
+        client.once('disconnect', () => clearTimeout(timer));
+      }
     } catch (e) {
       this.logger.debug(`Socket rejected: ${(e as Error).message}`);
       client.emit('error', { message: 'Unauthorized' });

@@ -24,7 +24,8 @@ export function configureApp(app: INestApplication, opts: { swagger?: boolean; l
     });
   });
   app.enableShutdownHooks();
-  if (opts.swagger !== false) {
+  // API docs: always in development; in production only when ENABLE_SWAGGER=true.
+  if (opts.swagger !== false && (!e.isProduction || e.ENABLE_SWAGGER)) {
     const doc = SwaggerModule.createDocument(
       app,
       new DocumentBuilder()

@@ -18,6 +18,7 @@ Errors: `{ statusCode, error, message }` (+ `problems: string[]` for price-table
 | GET | /team | → `UserDto[]` |
 | POST | /team/invite | `{ name, email, role }` → [UserDto] (owner/admin only) |
 | GET | /setup | → [SetupStepDto][] |
+| POST | /setup/number | → `{ e164, display }` (owner/admin). Buys the tenant's Oraviq number through the telephony adapter; idempotent. Sign-up only buys one in mock mode or with `PROVISION_NUMBER_ON_SIGNUP=true`. |
 | POST | /setup/test-call | → `{ ok: boolean, message: string }` (telephony adapter places a test call) |
 | GET | /connections | → [ChannelConnectionDto][] |
 | POST | /connections/:channel/connect | → [ChannelConnectionDto] (mock: connects immediately; real: returns `{ redirectUrl }`) |

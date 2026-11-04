@@ -95,7 +95,7 @@ export class InboundService {
     const body = String(evt.body ?? '').trim();
     const isPhone = SMS_FAMILY.includes(evt.channel);
     const from = isPhone ? normalizePhone(evt.from) ?? evt.from : evt.from;
-    const keyword = isPhone ? complianceKeyword(body) : null;
+    let keyword = isPhone ? complianceKeyword(body) : null;
 
     const { conv, msg } = await this.dbs.tx(async (tx) => {
       const contact = await this.contacts.findOrCreate(evt.channel, from, { name: evt.fromName ?? null, displayAddress: isPhone ? null : evt.fromName ?? `${CHANNEL_LABELS[evt.channel]} visitor` }, tx);
@@ -107,9 +107,14 @@ export class InboundService {
       return { conv, msg };
     });
 
-    if (keyword) return this.handleKeyword(keyword, conv, msg, tenant, from);
+    const optedOut = isPhone && (await this.contacts.isOptedOut(conv.contactId));
+    // A plain "YES" opts back in only someone who opted out; otherwise it answers "Want me to book it?".
+    if (!keyword && optedOut && /^yes[.!]*$/i.test(body)) keyword = 'start';
+    // Only a text from the customer's own phone can undo STOP (not the simulator, not a web form).
+    const ownNumber = evt.channel === 'sms' && !evt.simulated;
+    if (keyword) return this.handleKeyword(keyword, conv, msg, tenant, from, { optedOut, ownNumber });
 
-    if (isPhone && (await this.contacts.isOptedOut(conv.contactId))) {
+    if (optedOut) {
       await this.dbs.tx(async (tx) => {
         await tx.conversation.update({ where: { id: conv.id }, data: { state: 'needs_you', tag: 'Needs you', handoffReason: 'Customer opted out of texts (replied STOP). Call them to reply.' } });
         await this.outbox.realtime(tx, this.dbs.tenantId, { event: 'conversation.updated', id: conv.id });
@@ -124,7 +129,14 @@ export class InboundService {
     return { conversationId: conv.id, replies: fresh };
   }
 
-  private async handleKeyword(keyword: 'stop' | 'help' | 'start', conv: Conversation, msg: Message, tenant: { name: string; phone: string | null }, from: string): Promise<InboundResult> {
+  private async handleKeyword(
+    keyword: 'stop' | 'help' | 'start',
+    conv: Conversation,
+    msg: Message,
+    tenant: { name: string; phone: string | null },
+    from: string,
+    opts: { optedOut: boolean; ownNumber: boolean },
+  ): Promise<InboundResult> {
     const replies: Message[] = [];
     await this.dbs.tx(async (tx) => {
       if (keyword === 'stop') {
@@ -148,6 +160,8 @@ export class InboundService {
             compliance: true,
           }),
         );
+      } else if (opts.optedOut && !opts.ownNumber) {
+        await this.messaging.addSystem(tx, conv, 'START ignored: only the customer can opt back in, by texting START from their own phone.');
       } else {
         await this.contacts.grant(tx, { contactId: conv.contactId, source: 'inbound_message', evidence: { messageId: msg.id, keyword: msg.body, from } });
         replies.push(await this.messaging.addMessage(tx, conv, { author: 'assistant', body: `You're resubscribed to ${tenant.name} texts. Reply STOP to opt out.`, compliance: true }));

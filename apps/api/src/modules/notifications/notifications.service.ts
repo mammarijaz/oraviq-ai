@@ -1,6 +1,7 @@
 import { Injectable, Logger, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import webpush from 'web-push';
+import { isTextableNumber } from '../../common/phone';
 import { env } from '../../config/env';
 import { ChannelRouter } from '../../integrations/channel-router';
 import { OutboxService, type RealtimeRef } from '../../jobs/outbox.service';
@@ -55,7 +56,7 @@ export class NotificationsService implements OnModuleInit {
     const tenantId = this.dbs.tenantId;
     const tenant = await this.dbs.system.tenant.findUnique({ where: { id: tenantId } });
     const delivery: Record<string, unknown> = {};
-    if (a.sms && tenant?.alertPhone) {
+    if (a.sms && tenant?.alertPhone && isTextableNumber(tenant.alertPhone)) {
       const route = await this.router.resolve('sms');
       const res = await route.adapter.send({
         tenantId,

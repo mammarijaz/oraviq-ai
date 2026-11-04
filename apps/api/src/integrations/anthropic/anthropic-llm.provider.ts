@@ -4,6 +4,17 @@ import { activeSizes, DEBRIS_LABELS } from '@oraviq/pricing';
 import type { ConversationFacts, Placement } from '@oraviq/shared';
 import type { AssistantTools, AssistantTurnInput, AssistantTurnOutput, LlmProvider, ReviewDraftInput } from '../types';
 
+/** The only handoff reasons the model may give; each maps to a fixed sentence shown and texted to the owner. */
+export const HANDOFF_REASONS = {
+  prohibited_item: "The customer mentioned items you don't take.",
+  outside_service_area: 'The ZIP is outside your delivery zones; a price is needed.',
+  heavy_debris_size: "Concrete, dirt or brick in a size that doesn't allow it.",
+  asked_for_person: 'The customer asked for a person.',
+  cannot_price: "The assistant couldn't price this job.",
+  other: 'The assistant needs your help with this conversation.',
+} as const;
+export type HandoffReason = keyof typeof HANDOFF_REASONS;
+
 /**
  * Claude (Haiku 4.5 by default) through the Messages API with tool use.
  * The model gathers facts and calls tools; prices come only from get_quote,
@@ -59,7 +70,7 @@ export class AnthropicLlmProvider implements LlmProvider {
       name: 'handoff_to_human',
       description:
         'Hand the conversation to the owner: prohibited items, ZIP outside the zones, concrete/dirt in a size that does not allow it, anything you cannot price or answer, or the customer asks for a person.',
-      input_schema: { type: 'object', properties: { reason: { type: 'string' } }, required: ['reason'] },
+      input_schema: { type: 'object', properties: { reason: { type: 'string', enum: Object.keys(HANDOFF_REASONS) } }, required: ['reason'] },
     },
   ];
 
@@ -157,8 +168,10 @@ export class AnthropicLlmProvider implements LlmProvider {
             out = await tools.createOrderDraft({ address: facts.address, date: facts.date, placement: (args.placement as Placement) ?? null, name: args.name ?? null });
             aiState.stage = 'booked';
           } else if (tu.name === 'handoff_to_human') {
-            await tools.handoffToHuman(String(args.reason ?? 'The assistant asked for help'));
-            aiState.handoff = String(args.reason ?? '');
+            // Fixed owner-facing sentences only: a customer can't steer the text the owner is sent.
+            const sentence = HANDOFF_REASONS[String(args.reason) as HandoffReason] ?? HANDOFF_REASONS.other;
+            await tools.handoffToHuman(sentence);
+            aiState.handoff = sentence;
             out = { ok: true };
           } else {
             out = { ok: false, error: `Unknown tool ${tu.name}` };
@@ -201,3 +214,4 @@ export class AnthropicLlmProvider implements LlmProvider {
     return { text, traceId: res.id };
   }
 }
+

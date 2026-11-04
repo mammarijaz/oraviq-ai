@@ -1,7 +1,8 @@
+import { CurrentUser, type AuthUser } from '../../common/decorators';
 import { Body, Controller, Get, HttpCode, Param, ParseUUIDPipe, Post, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { ORDER_STATUSES, type CreateOrderRequest, type OrderStatus, type QuoteRequest, type RescheduleOrderRequest } from '@oraviq/shared';
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { InboxQueries } from '../inbox/inbox.queries';
 import { csv } from '../inbox/inbox.controller';
 import { QuotesService } from '../quotes/quotes.service';
@@ -62,8 +63,10 @@ export class OrdersController {
 
   @Post('orders/:id/status')
   @HttpCode(200)
-  status(@Param('id', uuid) id: string, @Body() body: { status: OrderStatus }) {
+  status(@Param('id', uuid) id: string, @Body() body: { status: OrderStatus }, @CurrentUser() user: AuthUser) {
     if (!ORDER_STATUSES.includes(body?.status)) throw new BadRequestException(`status must be one of ${ORDER_STATUSES.join(', ')}.`);
+    // Marking money as received by hand is for the owner or an admin, not staff.
+    if (body.status === 'deposit_paid' && user.role !== 'owner' && user.role !== 'admin') throw new ForbiddenException('Only the owner or an admin can mark a deposit paid.');
     return this.orders.setStatus(id, body.status);
   }
 }

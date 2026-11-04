@@ -2,6 +2,7 @@ import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import type { Channel, MessageAuthor } from '@oraviq/shared';
 import type { Conversation, Message } from '@prisma/client';
 import { ConflictActionException } from '../../common/errors';
+import { isTextableNumber } from '../../common/phone';
 import { ChannelRouter, deliveryChannel } from '../../integrations/channel-router';
 import { OutboxService } from '../../jobs/outbox.service';
 import { DbService } from '../../prisma/db.service';
@@ -50,11 +51,16 @@ export class MessagingService implements OnModuleInit {
     });
   }
 
-  /** Throws a clear 409 when the customer has opted out of texts and this would go by SMS. */
+  /** Throws a clear 409 when this would go by SMS and the customer opted out or the number can't be texted. */
   async assertCanText(conv: Pick<Conversation, 'contactId' | 'channel'>, tx: TenantTx = this.dbs.db): Promise<void> {
     if (deliveryChannel(conv.channel) !== 'sms') return;
     if (await this.contacts.isOptedOut(conv.contactId, 'sms', tx)) {
       throw new ConflictActionException('This customer replied STOP, so texts to them are blocked. Call them instead.', { reason: 'opted_out' });
+    }
+    const identities = await tx.contactIdentity.findMany({ where: { contactId: conv.contactId } });
+    const phone = contactPhone({ identities });
+    if (phone && !isTextableNumber(phone)) {
+      throw new ConflictActionException("We only text US and Canadian numbers, so this customer can't be texted. Call them instead.", { reason: 'blocked_destination' });
     }
   }
 
@@ -132,6 +138,11 @@ export class MessagingService implements OnModuleInit {
     else to = conv.contact.identities.find((i) => i.channel === route.channel)?.addressNormalized ?? null;
     if (!to) {
       await db.message.update({ where: { id: msg.id }, data: { status: 'failed', error: 'No address to send to on this channel.' } });
+      return;
+    }
+    // Every customer text passes here: no international / premium NANP destinations (SMS pumping).
+    if (route.channel === 'sms' && !isTextableNumber(to)) {
+      await db.message.update({ where: { id: msg.id }, data: { status: 'failed', error: 'Texts to this number are blocked (outside the US and Canada).' } });
       return;
     }
     if (route.channel === 'sms' && !compliance && (await this.contacts.isOptedOut(conv.contactId))) {

@@ -98,6 +98,7 @@ export const api = {
   setup: {
     steps: () => http.get<SetupStepDto[]>('/setup'),
     testCall: () => http.post<{ ok: boolean; message: string }>('/setup/test-call'),
+    number: () => http.post<{ e164: string; display: string }>('/setup/number'),
   },
   connections: {
     list: () => http.get<ChannelConnectionDto[]>('/connections'),

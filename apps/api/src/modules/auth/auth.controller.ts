@@ -1,12 +1,13 @@
 import { Body, Controller, Get, HttpCode, Post, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiBody, ApiTags } from '@nestjs/swagger';
 import type { LoginRequest, RegisterRequest } from '@oraviq/shared';
-import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
+import { Throttle } from '@nestjs/throttler';
+import { ClientIpThrottlerGuard } from '../../common/guards/client-ip-throttler.guard';
 import { CurrentUser, Public, type AuthUser } from '../../common/decorators';
 import { AuthService } from './auth.service';
 
 @ApiTags('auth')
-@UseGuards(ThrottlerGuard)
+@UseGuards(ClientIpThrottlerGuard)
 @Controller('auth')
 export class AuthController {
   constructor(private readonly auth: AuthService) {}

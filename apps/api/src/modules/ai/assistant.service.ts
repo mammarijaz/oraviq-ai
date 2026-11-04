@@ -98,6 +98,10 @@ export class AssistantService {
       },
       checkServiceArea: async (zip) => this.pricing.serviceArea(table, zip),
       createOrderDraft: async (input) => {
+        // One order per turn, and none while this conversation already has an open order.
+        if (ev.orders.length) throw new Error('An order was already created in this turn.');
+        const open = await this.dbs.db.order.findFirst({ where: { conversationId: conv.id, status: { notIn: ['closed', 'cancelled', 'picked_up'] } } });
+        if (open) throw new Error(`Order ${open.number} is already open for this customer; the owner will handle changes.`);
         const quoteId =
           ev.quotes[ev.quotes.length - 1]?.id ?? (await this.dbs.db.quote.findFirst({ where: { conversationId: conv.id }, orderBy: { createdAt: 'desc' } }))?.id;
         if (!quoteId) throw new Error('Quote the job before booking it.');

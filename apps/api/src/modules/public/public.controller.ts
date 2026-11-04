@@ -1,6 +1,7 @@
 import { Body, Controller, Get, HttpCode, Param, Post, Req, UseGuards } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
-import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
+import { Throttle } from '@nestjs/throttler';
+import { ClientIpThrottlerGuard } from '../../common/guards/client-ip-throttler.guard';
 import type { PublicBookingRequest, PublicChatMessageRequest, QuoteRequest } from '@oraviq/shared';
 import type { Request } from 'express';
 import { Public } from '../../common/decorators';
@@ -9,7 +10,7 @@ import { PublicService } from './public.service';
 /** Widgets and hauler sites. Any origin (CORS), throttled per IP. */
 @ApiTags('public')
 @Public()
-@UseGuards(ThrottlerGuard)
+@UseGuards(ClientIpThrottlerGuard)
 @Throttle({ default: { limit: 60, ttl: 60000 } })
 @Controller('public')
 export class PublicController {

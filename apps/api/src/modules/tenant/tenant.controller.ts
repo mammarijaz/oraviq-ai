@@ -38,6 +38,13 @@ export class TenantController {
     return this.tenants.setup();
   }
 
+  @Post('setup/number')
+  @Roles('owner', 'admin')
+  @HttpCode(200)
+  provisionNumber() {
+    return this.tenants.provisionOraviqNumber();
+  }
+
   @Post('setup/test-call')
   @HttpCode(200)
   testCall() {

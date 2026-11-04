@@ -37,7 +37,21 @@ function parts(text: string) {
 
 /** App routes only; the API also sends its own paths (/setup/test-call, /connections/…) for steps we handle with buttons. */
 function isInternal(href?: string) {
-  return !!href && href.startsWith('/') && !/^\/(setup|connections)\//.test(href);
+  return !!href && href.startsWith('/') && href !== '/setup' && !/^\/(setup|connections)\//.test(href);
+}
+
+const buying = ref(false);
+async function getNumber() {
+  buying.value = true;
+  try {
+    const r = await api.setup.number();
+    toast(`Your Oraviq number is ${r.display}.`);
+    void steps.run();
+  } catch (e) {
+    toast(errorMessage(e), { tone: 'danger' });
+  } finally {
+    buying.value = false;
+  }
 }
 
 async function testCall() {
@@ -94,6 +108,9 @@ async function onConnect(s: SetupStepDto) {
               {{ s.actionLabel || 'Connect' }}
             </OvButton>
           </template>
+          <OvButton v-else-if="s.key === 'number' && s.status !== 'done'" variant="primary" size="sm" :loading="buying" @click="getNumber">
+            {{ s.actionLabel || 'Get my number' }}
+          </OvButton>
           <OvButton v-else-if="s.key === 'forwarding' && s.status !== 'done'" variant="primary" size="sm" :loading="testing" @click="testCall">
             {{ s.actionLabel || 'Run test call' }}
           </OvButton>
