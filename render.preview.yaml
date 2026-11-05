@@ -1,0 +1,58 @@
+# Render Blueprint for a FREE TEST deployment of Oraviq: one web service, one address, demo data loaded.
+#
+#   https://<service>.onrender.com/          owner app (sign in as demo@oraviq.ai / demo1234)
+#   https://<service>.onrender.com/site/     the demo hauler's website, with the chat + booking widgets
+#   https://<service>.onrender.com/widgets/  the widgets on a stand-in "existing website"
+#   https://<service>.onrender.com/api/docs  API reference
+#
+# Set up: Render dashboard → New → Blueprint → connect the GitHub repo → Blueprint Path: render.preview.yaml.
+#
+# Every outside service runs its mock adapter (no keys needed) and DEMO_MODE turns on the demo tools
+# (mock deposit checkout, "run jobs now"). Never add real provider keys here: production is render.yaml.
+# Free-tier limits: the service sleeps after 15 minutes without visits (the next visit takes about a minute),
+# and Render deletes a free Postgres database 30 days after creation unless you upgrade it.
+databases:
+  - name: oraviq-demo-db
+    plan: free
+    databaseName: oraviq
+    user: oraviq
+    postgresMajorVersion: "16"
+
+services:
+  - type: web
+    name: oraviq-demo
+    runtime: node
+    plan: free
+    branch: main
+    autoDeploy: true
+    # Migrations and the demo data run in the build (free services have no pre-deploy step), so waking up stays fast.
+    buildCommand: >-
+      corepack enable
+      && pnpm install --frozen-lockfile --prod=false
+      && pnpm --filter @oraviq/api db:generate
+      && pnpm --workspace-concurrency=1 --filter "@oraviq/api..." --filter "@oraviq/web..." --filter "@oraviq/widgets..." --filter "@oraviq/sites..." run build
+      && node scripts/preview-start.mjs --setup
+    startCommand: node scripts/preview-start.mjs
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase: { name: oraviq-demo-db, property: connectionString }
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      - key: DEMO_MODE
+        value: "true"
+      # Build-time switches: the apps call the API on their own origin, under these paths.
+      - key: VITE_SAME_ORIGIN
+        value: "true"
+      - key: VITE_DEMO_TOOLS
+        value: "true"
+      - key: WIDGETS_BASE
+        value: /widgets/
+      - key: SITES_BASE_PATH
+        value: /site

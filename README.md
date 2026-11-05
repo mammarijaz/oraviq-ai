@@ -41,6 +41,34 @@ pnpm typecheck
 node e2e/widgets-and-sites.cjs          # browser e2e: hauler site + widgets against the running API
 ```
 
+## Free test link on Render
+
+`render.preview.yaml` deploys the whole product as **one free Render web service with one address**, with the demo company loaded and every outside service in mock mode. No domain or keys are needed.
+
+1. Sign in at https://dashboard.render.com (GitHub sign-in is easiest) and give Render access to this repo.
+2. **New → Blueprint**, pick the repo, set **Blueprint Path** to `render.preview.yaml`, then **Deploy Blueprint**. The first build takes about 5–10 minutes.
+3. Open the service's `onrender.com` address:
+
+| Path | What |
+|---|---|
+| `/` | Owner app. Sign in as **demo@oraviq.ai / demo1234** |
+| `/site/` | The demo hauler's website, with the chat and instant-price booking widgets |
+| `/widgets/` | The widgets on a stand-in "existing website" |
+| `/api/docs` | API reference |
+
+In the owner app, **Try it out** sends test texts, calls and Facebook messages through the AI. Because `DEMO_MODE` is on, an order in the inbox shows **Mark deposit paid (demo)**, which stands in for the customer paying the deposit link.
+
+Free-tier limits: the service sleeps after 15 minutes without visits, and the next visit takes about a minute to wake it. Render deletes a free Postgres database 30 days after it was created unless you upgrade it. Never put real provider keys on this deployment; production is `render.yaml`.
+
+The same one-origin build runs locally:
+
+```bash
+VITE_SAME_ORIGIN=true VITE_DEMO_TOOLS=true WIDGETS_BASE=/widgets/ SITES_BASE_PATH=/site \
+  pnpm --filter "@oraviq/api..." --filter "@oraviq/web..." --filter "@oraviq/widgets..." --filter "@oraviq/sites..." run build
+export JWT_SECRET=$(openssl rand -hex 24) JWT_REFRESH_SECRET=$(openssl rand -hex 24)
+PORT=8080 PREVIEW_SETUP=1 node scripts/preview-start.mjs      # http://localhost:8080
+```
+
 ## Deploy
 
 `render.yaml` is a Render Blueprint: API, worker and sites as Node services, the owner app and widgets as static sites, Render Postgres and Key Value. Put Cloudflare in front (DNS, CDN, WAF, R2, Cloudflare for SaaS custom hostnames). CI runs in GitHub Actions (`.github/workflows/ci.yml`).

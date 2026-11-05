@@ -3,7 +3,7 @@ import { formatMoney, formatTons } from '@oraviq/pricing';
 import { formatPhone, toE164 } from '@oraviq/shared';
 import '@oraviq/ui-tokens/tokens.css';
 import '../styles/site.css';
-import { loadSite, WIDGETS_URL } from '../lib/api';
+import { BROWSER_API_URL, loadSite, WIDGETS_URL } from '../lib/api';
 
 const site = await loadSite(Astro.request.headers.get('host') ?? 'localhost', Astro.url);
 if (!site) {
@@ -59,14 +59,14 @@ const safeJsonLd = JSON.stringify(jsonLd).replace(/</g, '\\u003c').replace(/>/g,
     <meta property="og:description" content={description} />
     <meta property="og:type" content="website" />
     <meta name="theme-color" content={b.accentColor} />
-    <link rel="icon" href="/oraviq-favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href={`${import.meta.env.BASE_URL.replace(/\/$/, '')}/oraviq-favicon.svg`} type="image/svg+xml" />
     <script type="application/ld+json" set:html={safeJsonLd} />
   </head>
   <body>
     <a class="skip" href="#main">Skip to content</a>
     <div class="site" style={`--site:${b.accentColor}`}>
       <header class="site-head">
-        <a class="site-brand" href="/" style="text-decoration:none"><i aria-hidden="true"></i>{b.name}</a>
+        <a class="site-brand" href={import.meta.env.BASE_URL} style="text-decoration:none"><i aria-hidden="true"></i>{b.name}</a>
         <span style="display:flex;gap:14px;align-items:center;flex-wrap:wrap">
           {phone && tel && <a class="small muted" href={`tel:${tel}`} style="text-decoration:none">{phone}</a>}
           {S.booking && <a class="site-btn" style="min-height:40px;text-decoration:none" href="#price">Get a price</a>}
@@ -173,7 +173,7 @@ const safeJsonLd = JSON.stringify(jsonLd).replace(/</g, '\\u003c').replace(/>/g,
         <div class="site-wrap">{b.name}{place ? ` · ${place}` : ''}{phone ? ` · ${phone}` : ''} · Website by Oraviq AI</div>
       </footer>
     </div>
-    <script async src={`${WIDGETS_URL}/w.js`} data-key={site.key} data-accent={b.accentColor} data-chat={S.chat ? 'true' : 'false'}></script>
+    <script async src={`${WIDGETS_URL}/w.js`} data-api-url={BROWSER_API_URL} data-key={site.key} data-accent={b.accentColor} data-chat={S.chat ? 'true' : 'false'}></script>
   </body>
 </html>
 

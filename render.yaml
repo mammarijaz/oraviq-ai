@@ -1,6 +1,8 @@
 # Render Blueprint: api + worker + hauler sites (Node), owner app + widgets (static), Postgres, Key Value.
 # Put Cloudflare in front (DNS, CDN, WAF, R2 for recordings, Cloudflare for SaaS custom hostnames).
 # Secrets marked sync: false are entered in the Render dashboard; unset provider keys run the mock adapters.
+# Installs use --prod=false: NODE_ENV=production would otherwise make pnpm skip the build tools (devDependencies).
+# For a free test deployment with demo data, use render.preview.yaml instead (see the README).
 databases:
   - name: oraviq-db
     plan: basic-1gb
@@ -18,10 +20,12 @@ services:
     name: oraviq-api
     runtime: node
     plan: standard
-    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm --filter @oraviq/api db:generate && pnpm turbo run build --filter=@oraviq/api... && pnpm --filter @oraviq/api db:deploy
-    startCommand: pnpm --filter @oraviq/api start:prod
+    buildCommand: corepack enable && pnpm install --frozen-lockfile --prod=false && pnpm --filter @oraviq/api db:generate && pnpm turbo run build --filter=@oraviq/api... && pnpm --filter @oraviq/api db:deploy
+    startCommand: cd apps/api && node dist/main.js
     healthCheckPath: /api/v1/health
     envVars: &apiEnv
+      - key: NODE_VERSION
+        value: "22"
       - key: NODE_ENV
         value: production
       - key: DATABASE_URL
@@ -63,17 +67,19 @@ services:
     name: oraviq-worker
     runtime: node
     plan: starter
-    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm --filter @oraviq/api db:generate && pnpm turbo run build --filter=@oraviq/api...
-    startCommand: pnpm --filter @oraviq/api start:worker
+    buildCommand: corepack enable && pnpm install --frozen-lockfile --prod=false && pnpm --filter @oraviq/api db:generate && pnpm turbo run build --filter=@oraviq/api...
+    startCommand: cd apps/api && node dist/worker.js
     envVars: *apiEnv
 
   - type: web
     name: oraviq-sites
     runtime: node
     plan: starter
-    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm turbo run build --filter=@oraviq/sites...
-    startCommand: pnpm --filter @oraviq/sites start
+    buildCommand: corepack enable && pnpm install --frozen-lockfile --prod=false && pnpm turbo run build --filter=@oraviq/sites...
+    startCommand: cd apps/sites && node dist/server/entry.mjs
     envVars:
+      - key: NODE_VERSION
+        value: "22"
       - key: PUBLIC_API_URL
         value: https://api.oraviq.com
       - key: WIDGETS_URL
@@ -82,25 +88,29 @@ services:
   - type: web
     name: oraviq-app
     runtime: static
-    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm turbo run build --filter=@oraviq/web...
+    buildCommand: corepack enable && pnpm install --frozen-lockfile --prod=false && pnpm turbo run build --filter=@oraviq/web...
     staticPublishPath: apps/web/dist
     routes:
       - type: rewrite
         source: /*
         destination: /index.html
     envVars:
+      - key: NODE_VERSION
+        value: "22"
       - key: VITE_API_URL
         value: https://api.oraviq.com
 
   - type: web
     name: oraviq-widgets
     runtime: static
-    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm turbo run build --filter=@oraviq/widgets...
+    buildCommand: corepack enable && pnpm install --frozen-lockfile --prod=false && pnpm turbo run build --filter=@oraviq/widgets...
     staticPublishPath: apps/widgets/dist
     headers:
       - path: /*
         name: Cache-Control
         value: public, max-age=300
     envVars:
+      - key: NODE_VERSION
+        value: "22"
       - key: VITE_API_URL
         value: https://api.oraviq.com

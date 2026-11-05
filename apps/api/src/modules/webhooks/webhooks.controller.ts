@@ -1,7 +1,8 @@
-import { BadRequestException, Body, Controller, Headers, HttpCode, Param, Post, Req, type RawBodyRequest } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Headers, HttpCode, Param, Post, Req, UnauthorizedException, type RawBodyRequest } from '@nestjs/common';
 import { ApiExcludeController } from '@nestjs/swagger';
 import type { Request } from 'express';
 import { Public } from '../../common/decorators';
+import { env } from '../../config/env';
 import { VoiceService } from '../voice/voice.service';
 import { WebhooksService } from './webhooks.service';
 
@@ -44,6 +45,8 @@ export class WebhooksController {
   @Post('webhooks/mock/:provider')
   @HttpCode(200)
   async mock(@Param('provider') provider: string, @Body() body: unknown) {
+    // Public and unsigned: never in production, DEMO_MODE included.
+    if (env().isProduction) throw new UnauthorizedException('Not available in production.');
     const r = await this.webhooks.receiveMock(provider, body);
     return { ok: true, duplicate: r.duplicate, id: r.id };
   }

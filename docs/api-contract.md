@@ -74,13 +74,13 @@ Errors: `{ statusCode, error, message }` (+ `problems: string[]` for price-table
 | POST | /simulator/missed-call | `{ from?: string }` → `{ conversationId }` |
 
 ## Notifications and health
-| GET | /health | → `{ ok, inlineJobs, adapters: { llm, messaging, telephony, reviews, voice, payments, domains } }` (**public**; each adapter is `mock` or `real`) |
+| GET | /health | → `{ ok, inlineJobs, demoMode, adapters: { llm, messaging, telephony, reviews, voice, payments, domains } }` (**public**; each adapter is `mock` or `real`) |
 | GET | /notifications | → [NotificationDto][] (owner alerts, newest first) |
 | GET | /notifications/push-key | → `{ publicKey }` (VAPID) |
 | POST | /notifications/push-subscriptions | a browser PushSubscription JSON → `{ ok: true }` |
 
-## Dev only (refused with 403 in production)
-| POST | /dev/payments/:sessionId/pay | marks a mock deposit paid (drives the same webhook path as Stripe) |
+## Dev only (refused with 403 in production, unless `DEMO_MODE=true` on a test deployment)
+| POST | /dev/payments/:sessionId/pay | marks a mock deposit paid (drives the same webhook path as Stripe); only while payments run the mock adapter |
 | POST | /dev/jobs/run | runs due scheduled actions now |
 | GET | /dev/mock/sent | messages the mock providers "sent" |
 

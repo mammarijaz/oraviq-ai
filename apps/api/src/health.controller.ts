@@ -13,6 +13,6 @@ export class HealthController {
   @Get()
   async health() {
     await this.prisma.$queryRaw`SELECT 1`;
-    return { ok: true, inlineJobs: env().inlineJobs, adapters: adapterModes() };
+    return { ok: true, inlineJobs: env().inlineJobs, demoMode: env().DEMO_MODE === true, adapters: adapterModes() };
   }
 }

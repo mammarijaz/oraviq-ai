@@ -35,6 +35,8 @@ const schema = z.object({
   PROVISION_NUMBER_ON_SIGNUP: bool,
   ENABLE_SWAGGER: bool,
   TRUST_CLOUDFLARE: bool,
+  /** Test deployments only: turns on the demo tools (mock checkout, run jobs now) in production, for mock adapters only. */
+  DEMO_MODE: bool,
   JOB_POLLERS: bool,
   JWT_SECRET: z.string().default('dev-access-secret-change-me'),
   JWT_REFRESH_SECRET: z.string().default('dev-refresh-secret-change-me'),
@@ -67,6 +69,8 @@ export type Env = z.infer<typeof schema> & {
   pollers: boolean;
   isProduction: boolean;
   isTest: boolean;
+  /** Dev routes (mock checkout, run jobs now) are on: always outside production, and with DEMO_MODE in production. */
+  demoTools: boolean;
 };
 
 let cached: Env | null = null;
@@ -85,6 +89,7 @@ export function env(): Env {
     pollers: parsed.JOB_POLLERS ?? !isTest,
     isProduction,
     isTest,
+    demoTools: !isProduction || parsed.DEMO_MODE === true,
   };
   // Refuse the built-in defaults, the .env.example placeholders, short secrets and a shared secret.
   const weak = (s: string) => s.startsWith('dev-') || s.startsWith('change-me') || s.length < 32;

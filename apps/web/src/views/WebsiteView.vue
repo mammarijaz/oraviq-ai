@@ -147,7 +147,7 @@ async function connectDomain() {
   }
 }
 
-const liveUrl = computed(() => (pk.value ? `${SITES_URL}/?key=${encodeURIComponent(pk.value)}&v=${frameVersion.value}` : null));
+const liveUrl = computed(() => (pk.value ? `${SITES_URL}/?key=${encodeURIComponent(pk.value)}&preview=1&v=${frameVersion.value}` : null));
 
 /* ---------------------------------------------------------------- widgets */
 

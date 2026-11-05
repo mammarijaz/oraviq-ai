@@ -12,6 +12,7 @@ One script tag per page. Works on WordPress, Wix, Squarespace and GoDaddy custom
 
 ## Loader (`w.js`, vanilla TS, < 10 KB gzipped)
 - Reads `data-key` (publishable key) from its own script tag. Optional: `data-chat="false"` (no launcher), `data-accent="#1F6B4F"` (overrides the hauler's colour), `data-position="left|right"`.
+- `{WIDGETS}` is the folder `w.js` was loaded from (`https://widgets.oraviq.com`, or `https://host/widgets` on the one-origin test deployment); `data-widgets-url` overrides it. `{API}` comes from `data-api-url`, otherwise it is guessed: `widgets.<domain>` → `api.<domain>`, the widgets dev server (`localhost:5175`) → `localhost:3000`, anything else → the same origin. postMessage checks use the origin of `{WIDGETS}`.
 - Fetches `GET {API}/api/v1/public/{key}/business` once for the accent, chat label and position.
 - Chat: renders a launcher pill inside a **Shadow DOM** host (host CSS can't break it). Clicking opens an iframe `{WIDGETS}/chat.html?key=…&accent=…` in a 360×520 panel (full screen under 480px). Any element with `data-oraviq-open-chat` also opens it. `window.OraviqWidgets.openChat()` / `.closeChat()`.
 - Booking: for every `[data-oraviq-booking]` element (optional per-element `data-key`), mounts an iframe `{WIDGETS}/book.html?key=…&accent=…` that auto-resizes to its content.

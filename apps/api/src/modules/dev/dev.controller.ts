@@ -1,14 +1,14 @@
 import { Body, Controller, ForbiddenException, Get, HttpCode, Param, Post } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { CurrentUser, Public, type AuthUser } from '../../common/decorators';
-import { env } from '../../config/env';
+import { adapterModes, env } from '../../config/env';
 import { MockMessagingAdapter } from '../../integrations/mock/mock-messaging.adapter';
 import { OutboxService } from '../../jobs/outbox.service';
 import { ScheduledActionsService } from '../../jobs/scheduled-actions.service';
 import { DbService } from '../../prisma/db.service';
 import { WebhooksService } from '../webhooks/webhooks.service';
 
-/** Development helpers. Disabled in production. */
+/** Development helpers. Disabled in production unless DEMO_MODE is set. */
 @ApiTags('dev')
 @Controller('dev')
 export class DevController {
@@ -19,8 +19,9 @@ export class DevController {
     private readonly dbs: DbService,
   ) {}
 
+  /** Off in production unless DEMO_MODE is set (test deployments). */
   private guard() {
-    if (env().isProduction) throw new ForbiddenException('Not available in production.');
+    if (!env().demoTools) throw new ForbiddenException('Not available in production.');
   }
 
   /** Mock checkout: marks a mock session paid via the same pipeline as Stripe's checkout.session.completed. */
@@ -29,6 +30,8 @@ export class DevController {
   @HttpCode(200)
   async pay(@Param('sessionId') sessionId: string) {
     this.guard();
+    // Never mark an order paid without a payment when real Stripe is on.
+    if (adapterModes().payments !== 'mock') throw new ForbiddenException('Mock checkout is only available with mock payments.');
     const order = await this.dbs.system.order.findFirst({ where: { paymentSessionId: sessionId } });
     if (!order) return { ok: false, message: 'Unknown session.' };
     const r = await this.webhooks.receiveMock('stripe', {

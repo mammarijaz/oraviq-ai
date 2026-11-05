@@ -15,6 +15,8 @@ const devLoader = (): Plugin => ({
 });
 
 export default defineConfig({
+  // WIDGETS_BASE=/widgets/ when the widgets are served from a sub-path (the one-origin test deployment).
+  base: process.env.WIDGETS_BASE ?? '/',
   plugins: [devLoader()],
   server: { port: 5175, host: true },
   preview: { port: 5175 },

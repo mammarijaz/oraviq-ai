@@ -1,7 +1,9 @@
 /** Shared plumbing for the iframe apps: URL params, hauler colour, API calls and the postMessage bridge. */
 const params = new URLSearchParams(location.search);
 export const KEY = params.get('key') ?? '';
-export const API = (params.get('api') ?? (import.meta.env.VITE_API_URL as string | undefined) ?? 'http://localhost:3000').replace(/\/$/, '');
+// VITE_SAME_ORIGIN: a one-origin test deployment, where the API and the widgets share a host.
+const builtApi = import.meta.env.VITE_SAME_ORIGIN === 'true' ? location.origin : (import.meta.env.VITE_API_URL as string | undefined) || 'http://localhost:3000';
+export const API = (params.get('api') ?? builtApi).replace(/\/$/, '');
 const parentOrigin = (() => {
   try { return new URL(params.get('origin') ?? '').origin; } catch { return '*'; }
 })();

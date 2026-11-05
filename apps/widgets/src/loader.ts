@@ -19,8 +19,14 @@
   if (!/^pk_[A-Za-z0-9_]+$/.test(key)) { console.warn('[Oraviq] data-key is missing or invalid'); return; }
 
   const scriptUrl = new URL(script.src || location.href, location.href);
-  const WIDGETS = (script.getAttribute('data-widgets-url') ?? scriptUrl.origin).replace(/\/$/, '');
-  const API = (script.getAttribute('data-api-url') ?? (WIDGETS.includes('localhost') ? 'http://localhost:3000' : WIDGETS.replace('//widgets.', '//api.'))).replace(/\/$/, '');
+  // Widgets base: the folder w.js came from (https://widgets.oraviq.com, or https://host/widgets on a one-origin test deployment).
+  const WIDGETS = (script.getAttribute('data-widgets-url') ?? new URL('.', scriptUrl).href).replace(/\/$/, '');
+  const WIDGETS_ORIGIN = new URL(WIDGETS, location.href).origin;
+  // Guess the API when data-api-url is absent: the widgets dev server (:5175) → the dev API (:3000);
+  // widgets.<domain> → api.<domain>; anything else (the one-origin test deployment) → the same origin.
+  const devServer = /^(localhost|127\.0\.0\.1)$/.test(scriptUrl.hostname) && scriptUrl.port === '5175';
+  const guessedApi = devServer ? 'http://localhost:3000' : scriptUrl.hostname.startsWith('widgets.') ? scriptUrl.origin.replace('//widgets.', '//api.') : scriptUrl.origin;
+  const API = (script.getAttribute('data-api-url') ?? guessedApi).replace(/\/$/, '');
   const accentAttr = script.getAttribute('data-accent');
   const chatOn = script.getAttribute('data-chat') !== 'false';
   const posAttr = script.getAttribute('data-position') as 'left' | 'right' | null;
@@ -79,7 +85,7 @@
       chatFrame.allow = 'clipboard-write';
       panel.appendChild(chatFrame);
     } else {
-      chatFrame.contentWindow?.postMessage({ type: 'oraviq:open' }, WIDGETS);
+      chatFrame.contentWindow?.postMessage({ type: 'oraviq:open' }, WIDGETS_ORIGIN);
     }
     panel.classList.add('open');
     launcher?.setAttribute('aria-expanded', 'true');
@@ -112,7 +118,7 @@
   }
 
   window.addEventListener('message', (e: MessageEvent) => {
-    if (e.origin !== WIDGETS || !e.data || typeof e.data.type !== 'string') return;
+    if (e.origin !== WIDGETS_ORIGIN || !e.data || typeof e.data.type !== 'string') return;
     const src = e.source as Window | null;
     if (e.data.type === 'oraviq:resize') {
       const f = bookingFrames.find((x) => x.contentWindow === src);

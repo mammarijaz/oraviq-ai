@@ -251,6 +251,11 @@ async function order(input: {
 /* ------------------------------------------------------------------ seed */
 
 async function main(): Promise<void> {
+  // --if-missing: test deployments run the seed on every start; keep the demo data people have been changing.
+  if (process.argv.includes('--if-missing') && (await prisma.tenant.findUnique({ where: { id: TENANT_ID }, select: { id: true } }))) {
+    console.log(`${NAME} already exists; seed skipped (--if-missing).`);
+    return;
+  }
   await reset();
 
   await prisma.tenant.create({

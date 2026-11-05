@@ -3,8 +3,12 @@ import type { PublicBusinessDto } from '@oraviq/shared';
 const API = (import.meta.env.PUBLIC_API_URL ?? process.env.PUBLIC_API_URL ?? 'http://localhost:3000').replace(/\/$/, '');
 const BASE_DOMAIN = (process.env.SITES_BASE_DOMAIN ?? import.meta.env.SITES_BASE_DOMAIN ?? 'oraviq.site').toLowerCase();
 const DEV_KEY = process.env.DEFAULT_SITE_KEY ?? import.meta.env.DEFAULT_SITE_KEY ?? 'pk_demo_rolloff';
+/** Test deployments: the site to show when the host matches no hauler (e.g. an onrender.com address). Unset in production. */
+const FALLBACK_KEY = process.env.SITES_FALLBACK_KEY || undefined;
 
 export const WIDGETS_URL = (import.meta.env.PUBLIC_WIDGETS_URL ?? process.env.WIDGETS_URL ?? 'http://localhost:5175').replace(/\/$/, '');
+/** API origin as the visitor's browser reaches it, passed to w.js (it guesses api.<domain> from widgets.<domain> otherwise). */
+export const BROWSER_API_URL = (process.env.BROWSER_API_URL ?? '').replace(/\/$/, '') || undefined;
 
 export interface ResolvedSite {
   key: string;
@@ -30,7 +34,7 @@ export async function resolveKey(host: string, url: URL): Promise<string | null>
   if (isLocal) return preview ?? DEV_KEY;
   if (preview && preview.startsWith('pk_') && url.searchParams.get('preview') === '1') return preview;
   const r = await getJson<{ key: string }>(`/public/sites/by-host/${encodeURIComponent(host)}`);
-  return r?.key ?? null;
+  return r?.key ?? FALLBACK_KEY ?? null;
 }
 
 export async function loadSite(host: string, url: URL): Promise<ResolvedSite | null> {
@@ -39,7 +43,8 @@ export async function loadSite(host: string, url: URL): Promise<ResolvedSite | n
   const business = await getJson<PublicBusinessDto>(`/public/${encodeURIComponent(key)}/business`);
   if (!business) return null;
   const isLocal = /^(localhost|127\.0\.0\.1)/.test(host);
-  const canonical = isLocal ? url.origin : `https://${host}`;
+  const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+  const canonical = `${isLocal ? url.origin : `https://${host}`}${base}`;
   return { key, business, host, canonical };
 }
 

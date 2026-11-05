@@ -1,13 +1,15 @@
 // End-to-end: hauler site (Astro, :4321) + widgets (:5175) + API (:3000). Books through the iframe and chats on desktop and mobile.
-// Run: node e2e/widgets-and-sites.cjs (with api, sites and widgets running).
+// Run: node e2e/widgets-and-sites.cjs [site URL] (with api, sites and widgets running; default http://localhost:4321/).
+// Against the one-origin test deployment: node e2e/widgets-and-sites.cjs http://localhost:8080/site/
 const { chromium } = require('playwright');
+const SITE = process.argv[2] || 'http://localhost:4321/';
 (async () => {
   const b = await chromium.launch(); const errors = [];
   for (const [w, h, tag] of [[1280, 900, 'd'], [390, 844, 'm']]) {
     const ctx = await b.newContext({ viewport: { width: w, height: h } });
     
     const p = await ctx.newPage(); p.on('pageerror', e => errors.push(tag + ' ' + e.message)); p.on('console', m => { if (m.type() === 'error') errors.push(tag + ' console ' + m.text()); });
-    await p.goto('http://localhost:4321/'); await p.waitForTimeout(1500);
+    await p.goto(SITE); await p.waitForTimeout(1500);
     const fr = p.frameLocator('iframe[title="Get an instant price"]');
     await fr.locator('#bw-zip').fill('30319'); await fr.locator('#bw-days').fill('10'); await p.waitForTimeout(600);
     console.log(tag, 'quote:', (await fr.locator('#bw-quote').innerText()).replace(/\n/g, ' | '));

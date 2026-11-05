@@ -3,7 +3,7 @@ import type { Channel } from '@oraviq/shared';
 import { Prisma } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import { normalizePhone } from '../../common/phone';
-import { env } from '../../config/env';
+import { adapterModes, env } from '../../config/env';
 import { TenantContext } from '../../core/tenant-context';
 import { PAYMENTS_ADAPTER, VOICE_AGENT_ADAPTER, type PaymentsAdapter, type VoiceAgentAdapter } from '../../integrations/types';
 import { verifyZernioSignature } from '../../integrations/zernio/zernio.client';
@@ -99,7 +99,10 @@ export class WebhooksService implements OnModuleInit {
 
   /** Dev only: replay a fixture through the same pipeline (no signature). */
   async receiveMock(provider: string, body: any) {
-    if (env().isProduction) throw new UnauthorizedException('Not available in production.');
+    // Production: only a DEMO_MODE test deployment, and only for a provider that is running its mock adapter.
+    const modes = adapterModes();
+    const mock = { zernio: modes.messaging, retell: modes.voice, stripe: modes.payments }[provider as 'zernio' | 'retell' | 'stripe'] === 'mock';
+    if (env().isProduction && !(env().demoTools && mock)) throw new UnauthorizedException('Not available in production.');
     if (!['zernio', 'retell', 'stripe'].includes(provider)) throw new BadRequestException('Provider must be zernio, retell or stripe.');
     const id = provider === 'retell' ? `${body?.event}:${body?.call?.call_id}` : String(body?.id ?? randomUUID());
     if (provider === 'stripe') {
